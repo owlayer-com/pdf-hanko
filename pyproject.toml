@@ -1,0 +1,76 @@
+[project]
+name = "pdfhanko"
+version = "0.1.0"
+description = "日本のハンコ文化に特化した PDF 電子署名アプリ"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11.14,<3.13"
+authors = [{ name = "owlayer-com" }]
+keywords = ["pdf", "hanko", "signature", "pades", "japan", "stamp", "macos"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Japanese",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+]
+dependencies = [
+    "pillow>=12.2.0",
+    "pyhanko-cli>=0.4.0",
+    "pyhanko[pkcs11]>=0.35.1",
+    "pypdfium2>=5.8.0",
+    "toga>=0.5.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/owlayer-com/pdf-hanko"
+Repository = "https://github.com/owlayer-com/pdf-hanko"
+Issues = "https://github.com/owlayer-com/pdf-hanko/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pdfhanko"]
+
+[tool.uv]
+package = true
+
+# ---- Briefcase 設定 ----
+# Mac App Store には公開しないが、自分用 / 配布用 .app バンドル生成のために
+# Briefcase 設定を維持する。bundle は owlayer.com ドメイン逆順形式。
+[tool.briefcase]
+project_name = "PDF Hanko"
+bundle = "com.owlayer"
+version = "0.1.0"
+url = "https://github.com/owlayer-com/pdf-hanko"
+license.file = "LICENSE"
+author = "owlayer-com"
+author_email = "noreply@owlayer.com"
+
+[tool.briefcase.app.pdfhanko]
+formal_name = "PDF Hanko"
+description = "日本のハンコ文化に特化した PDF 電子署名アプリ"
+long_description = """
+あらかじめ登録した印影画像と PKCS#12 証明書を用いて、PDF 上に
+「押印」操作で見た目のハンコと PAdES 準拠の電子署名を同時に付与する macOS アプリ。
+"""
+sources = ["src/pdfhanko"]
+test_sources = ["tests"]
+requires = [
+    "pillow>=12.2.0",
+    "pyhanko[pkcs11]>=0.35.1",
+    "pypdfium2>=5.8.0",
+]
+
+[tool.briefcase.app.pdfhanko.macOS]
+universal_build = true
+requires = [
+    "toga-cocoa>=0.5.4",
+    "std-nslog>=1.0.0",
+]

@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build / package artifacts
+build/
+dist/
+wheels/
+
+# Briefcase (build/ は上の Python セクションでカバー済み)
+logs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# PoC (Phase 0 検証用スクリプト / 生成物)
+# 本実装は src/ 配下にあり、poc/ は git 管理対象外とする
+poc/
+
+# ローカル設定 / 機密情報
+.env
+.env.local
+*.local
+
+# Claude / AI アシスタント関連
+.claude/
+CLAUDE.md
+
+# 社内向け設計ドキュメント (公開対象外)
+REQUIREMENTS.md
