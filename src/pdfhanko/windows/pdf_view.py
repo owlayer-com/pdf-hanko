@@ -156,6 +156,28 @@ class PdfView:
         self._update_nav_buttons()
         self._emit_status()
 
+    def cleanup(self) -> None:
+        """終了時に保持するネイティブリソースを解放する。
+
+        pypdfium2 の :class:`PdfDocument` はネイティブハンドルを抱えているため、
+        Python の GC まかせにせず明示的に閉じる。``toga.Image`` のキャッシュも
+        参照を切って Cocoa 側の autorelease 対象を減らす。
+        """
+        if self.doc is not None:
+            try:
+                self.doc.close()
+            except Exception:
+                pass
+            self.doc = None
+        self.doc_path = None
+        self.rendered = None
+        self.page_image = None
+        self.hanko_image_cache.clear()
+        try:
+            self.canvas.root_state.drawing_actions.clear()
+        except Exception:
+            pass
+
     def close_pdf(self) -> None:
         """現在の PDF を閉じて、内部状態と Canvas をリセットする。"""
         if self.doc is not None:

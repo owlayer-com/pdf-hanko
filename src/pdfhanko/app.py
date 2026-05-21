@@ -16,9 +16,11 @@ class PdfHankoApp(toga.App):
 
     Attributes:
         store: ハンコ永続化ストア。``startup`` 内で初期化される。
+        main_window_obj: メインウィンドウのラッパインスタンス。
     """
 
     store: HankoStore
+    main_window_obj: MainWindow
 
     def startup(self) -> None:
         """Toga フレームワークから呼ばれる起動フック。
@@ -31,6 +33,25 @@ class PdfHankoApp(toga.App):
         self.main_window_obj = MainWindow(self)
         self.main_window = self.main_window_obj.window
         self.main_window.show()
+
+    def on_exit(self) -> bool:
+        """アプリ終了直前のフック。ネイティブリソースを明示的に解放する。
+
+        Toga / rubicon-objc は Cocoa 側の autorelease pool が drain される際に
+        Python コールバック (deallocator) を呼び戻す。Python インタープリタが
+        先に shutdown 済みだとここで segfault することがあるため、可能な限り
+        終了前に Python 側から native ハンドル (pypdfium2 の PdfDocument 等) を
+        明示 close しておく。
+
+        Returns:
+            True を返すと終了を許可する。クリーンアップに失敗しても終了を
+            止めないよう、例外は内部で握りつぶす。
+        """
+        try:
+            self.main_window_obj.cleanup()
+        except Exception:
+            pass
+        return True
 
 
 def main() -> PdfHankoApp:
