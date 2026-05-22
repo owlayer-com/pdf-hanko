@@ -35,13 +35,16 @@ PKCS#12 証明書のパスワードは永続化されず、署名処理中のみ
 
 ## ダウンロード
 
-> ℹ️ **v0.1.0 リリース予定**（準備中）。リリース完了後、ここにダウンロードリンクを掲載します。
-> 暫定的に試したい場合は次の「インストール / 実行」のソースビルド手順をご利用ください。
+最新版は [v0.1.0 リリースページ](https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0)
+から `PDF Hanko-0.1.0.dmg`（約 63 MB）をダウンロードできます。すべてのリリースは
+[Releases 一覧](https://github.com/owlayer-com/pdf-hanko/releases) を参照してください。
 
-最新版および過去のリリースは
-[Releases ページ](https://github.com/owlayer-com/pdf-hanko/releases)
-からダウンロードできます。`.dmg` を開き、`PDF Hanko.app` を `Applications` フォルダにドラッグして
-インストールしてください。
+### インストール手順
+
+1. ダウンロードした `.dmg` をダブルクリックして開く
+2. 表示されるウィンドウで `PDF Hanko.app` を `Applications` フォルダにドラッグ
+3. `.dmg` をアンマウント（取り出し）
+4. `Applications` から `PDF Hanko.app` を起動
 
 初回起動時は macOS Gatekeeper の警告が表示されます。下記の
 「[macOS Gatekeeper の警告について](#release-からダウンロードして使う場合-macos-gatekeeper-の警告について)」
@@ -99,18 +102,20 @@ uv run briefcase run macOS
 
 ### Release からダウンロードして使う場合: macOS Gatekeeper の警告について
 
-GitHub Releases に添付されている `.app` / `.dmg` には **Apple Developer ID
-署名が付いていません**。そのため、初回起動時に macOS の Gatekeeper による警告
-（「開発元が未確認のため開けません」など）が表示されます。
+GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署名が
+付与されていません**。そのため、`.dmg` を開いた後に展開された `PDF Hanko.app`
+を初回起動するとき、macOS の Gatekeeper による警告（「開発元が未確認のため
+開けません」など）が表示されます。
 
 これは本アプリに限らず、署名されていない macOS アプリで発生する一般的な挙動です。
 回避方法は以下の通りです：
 
 #### 方法 1: 右クリックから開く（macOS Sonoma 14 以前で確実）
 
-1. Finder で `PDF Hanko.app` を探す
-2. **右クリック（または control + クリック）** → メニューから「**開く**」を選択
-3. 警告ダイアログで「**開く**」をクリック
+1. `.dmg` を開き、`PDF Hanko.app` を `Applications` フォルダにドラッグしてインストール
+2. Finder で `Applications/PDF Hanko.app` を **右クリック（または control + クリック）**
+3. メニューから「**開く**」を選択
+4. 警告ダイアログで「**開く**」をクリック
 
 一度この手順を実行すれば、以降は通常通り Dock / Launchpad からダブルクリックで
 起動できます。
@@ -119,13 +124,14 @@ GitHub Releases に添付されている `.app` / `.dmg` には **Apple Develope
 
 新しい macOS では方法 1 が制限されているため、システム設定からの許可が必要です：
 
-1. 通常通り `PDF Hanko.app` をダブルクリックする → 警告が表示される（OK を押して閉じる）
-2. **アップルメニュー → システム設定 → プライバシーとセキュリティ**
-3. 画面を下までスクロールすると、「"PDF Hanko" は開発元を確認できないため使用が
+1. `.dmg` を開き、`PDF Hanko.app` を `Applications` フォルダにドラッグしてインストール
+2. 通常通り `PDF Hanko.app` をダブルクリックする → 警告が表示される（OK を押して閉じる）
+3. **アップルメニュー → システム設定 → プライバシーとセキュリティ**
+4. 画面を下までスクロールすると、「"PDF Hanko" は開発元を確認できないため使用が
    ブロックされました」という表示の右に「**このまま開く**」または「**開発元にかかわらず開く**」
    というボタンがあるのでクリック
-4. Touch ID または管理者パスワードで認証
-5. 再度 `PDF Hanko.app` をダブルクリックすると起動できる
+5. Touch ID または管理者パスワードで認証
+6. 再度 `PDF Hanko.app` をダブルクリックすると起動できる
 
 #### 方法 3: 自分でソースからビルドする（最も安全）
 
