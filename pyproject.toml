@@ -3,7 +3,8 @@ name = "pdfhanko"
 version = "0.1.0"
 description = "日本のハンコ文化に特化した PDF 電子署名アプリ"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11.14,<3.13"
 authors = [{ name = "owlayer-com" }]
 keywords = ["pdf", "hanko", "signature", "pades", "japan", "stamp", "macos"]
@@ -49,7 +50,6 @@ project_name = "PDF Hanko"
 bundle = "com.owlayer"
 version = "0.1.0"
 url = "https://github.com/owlayer-com/pdf-hanko"
-license.file = "LICENSE"
 author = "owlayer-com"
 author_email = "noreply@owlayer.com"
 
@@ -60,6 +60,8 @@ long_description = """
 あらかじめ登録した印影画像と PKCS#12 証明書を用いて、PDF 上に
 「押印」操作で見た目のハンコと PAdES 準拠の電子署名を同時に付与する macOS アプリ。
 """
+# 拡張子なしで指定すると、Briefcase が各 OS 用 (.icns / .ico / .png) を探す
+icon = "src/pdfhanko/resources/pdfhanko"
 sources = ["src/pdfhanko"]
 test_sources = ["tests"]
 requires = [
@@ -73,4 +75,9 @@ universal_build = true
 requires = [
     "toga-cocoa>=0.5.4",
     "std-nslog>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "briefcase>=0.4.2",
 ]

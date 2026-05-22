@@ -197,6 +197,18 @@ class MainWindow:
             children=[toolbar, body],
         )
 
+    def cleanup(self) -> None:
+        """アプリ終了前に保有リソースを明示的に解放する。
+
+        :class:`PdfHankoApp.on_exit` から呼ばれる。Toga / rubicon-objc と
+        Cocoa autorelease pool の終了タイミング競合による segfault を
+        抑制するための補助処理。
+        """
+        try:
+            self.pdf_view.cleanup()
+        except Exception:
+            pass
+
     def _on_pdf_status_change(self, text: str) -> None:
         """PDF ビューの状態変化時に呼ばれるコールバック。
 
