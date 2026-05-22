@@ -79,6 +79,7 @@ class PdfView:
         self.hanko_image_cache: dict[str, toga.Image] = {}
         self.click_canvas: tuple[float, float] | None = None
         self.pending_box_pdf: tuple[int, int, int, int] | None = None
+        self.interactive: bool = True
 
         self._on_status_change = on_status_change
 
@@ -371,20 +372,20 @@ class PdfView:
 
     def _on_canvas_press(self, widget, x, y, **_) -> None:
         """Canvas でのマウスボタン押下イベント。"""
-        if self.doc is None or self.selected_hanko is None:
+        if self.doc is None or self.selected_hanko is None or not self.interactive:
             return
         self._update_pending(x, y)
         self._emit_status()
 
     def _on_canvas_drag(self, widget, x, y, **_) -> None:
         """Canvas 上でのドラッグイベント。プレビューをマウスに追従させる。"""
-        if self.doc is None or self.selected_hanko is None:
+        if self.doc is None or self.selected_hanko is None or not self.interactive:
             return
         self._update_pending(x, y)
 
     def _on_canvas_release(self, widget, x, y, **_) -> None:
         """Canvas でのマウスボタン解放イベント。押印位置を確定する。"""
-        if self.doc is None or self.selected_hanko is None:
+        if self.doc is None or self.selected_hanko is None or not self.interactive:
             return
         self._update_pending(x, y)
         self._emit_status()

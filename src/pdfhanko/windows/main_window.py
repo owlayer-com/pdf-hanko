@@ -168,7 +168,12 @@ class MainWindow:
         )
         toolbar = toga.Box(
             style=Pack(direction=ROW, align_items="center"),
-            children=[self.open_pdf_btn, register_btn, self.sign_btn],
+            children=[
+                self.open_pdf_btn,
+                self.sign_btn,
+                toga.Box(style=Pack(flex=1)),
+                register_btn,
+            ],
         )
 
         self.left_pane = toga.Box(
@@ -229,7 +234,7 @@ class MainWindow:
         if not self.app.store.hankos:
             self.hanko_list_box.add(
                 toga.Label(
-                    "（未登録）右上の「ハンコを登録...」から追加してください",
+                    "（未登録）右上の「ハンコを登録...」から\n追加してください",
                     style=Pack(margin=8, color="#888"),
                 )
             )
@@ -273,12 +278,12 @@ class MainWindow:
         modify_btn = toga.Button(
             "変更",
             on_press=make_modify_handler(hanko),
-            style=Pack(margin=2, width=60),
+            style=Pack(margin=2, width=58),
         )
         delete_btn = toga.Button(
             "削除",
             on_press=make_delete_handler(hanko),
-            style=Pack(margin=2, width=60),
+            style=Pack(margin=2, width=58),
         )
 
         return toga.Box(
@@ -290,7 +295,13 @@ class MainWindow:
             children=[
                 clickable_area,
                 toga.Box(
-                    style=Pack(direction=COLUMN, margin=2),
+                    style=Pack(
+                        direction=COLUMN,
+                        margin_top=2,
+                        margin_right=2,
+                        margin_bottom=2,
+                        margin_left=8,
+                    ),
                     children=[modify_btn, delete_btn],
                 ),
             ],
@@ -340,12 +351,20 @@ class MainWindow:
     def _on_select_hanko(self, hanko: Hanko) -> None:
         """ハンコ行のクリック領域が押された時のハンドラ。
 
+        既に選択中のハンコを再度クリックした場合は選択を解除する。
+
         Args:
-            hanko: 選択されたハンコ。
+            hanko: クリックされたハンコ。
         """
-        self.selected_hanko = hanko
-        self.pdf_view.set_selected_hanko(hanko, self.app.store.base_dir)
+        if self.selected_hanko is not None and self.selected_hanko.id == hanko.id:
+            self.selected_hanko = None
+            self.pdf_view.interactive = False
+        else:
+            self.selected_hanko = hanko
+            self.pdf_view.set_selected_hanko(hanko, self.app.store.base_dir)
+            self.pdf_view.interactive = True
         self._refresh_hanko_list()
+        self._on_pdf_status_change("")
 
     async def _on_delete_hanko(self, hanko: Hanko) -> None:
         """ハンコ行の「削除」ボタン押下時のハンドラ。
