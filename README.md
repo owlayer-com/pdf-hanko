@@ -30,14 +30,53 @@ PKCS#12 証明書のパスワードは永続化されず、署名処理中のみ
 
 ## 動作環境
 
-- macOS（Apple Silicon / Intel）
-- Python 3.11+
+- macOS（Apple Silicon / Intel 両対応）
+- Python 3.11+（ソースから実行する場合に必要。`uv` が自動でセットアップします）
+
+## ダウンロード
+
+> ℹ️ **v0.1.0 リリース予定**（準備中）。リリース完了後、ここにダウンロードリンクを掲載します。
+> 暫定的に試したい場合は次の「インストール / 実行」のソースビルド手順をご利用ください。
+
+最新版および過去のリリースは
+[Releases ページ](https://github.com/owlayer-com/pdf-hanko/releases)
+からダウンロードできます。`.dmg` を開き、`PDF Hanko.app` を `Applications` フォルダにドラッグして
+インストールしてください。
+
+初回起動時は macOS Gatekeeper の警告が表示されます。下記の
+「[macOS Gatekeeper の警告について](#release-からダウンロードして使う場合-macos-gatekeeper-の警告について)」
+を参照してください。
+
+## 事前準備
+
+「ソースから実行する」「`.app` バンドルを自分でビルドする」場合は、いずれも
+パッケージマネージャの [uv](https://github.com/astral-sh/uv) が必要です。
+uv は本プロジェクトの依存解決・仮想環境管理・Python ランタイムのセット
+アップをすべて担当します。
+
+> ℹ️ リリース版の `.dmg` をダウンロードして使うだけなら uv は不要です。
+
+### Homebrew でインストール（推奨）
+
+```bash
+brew install uv
+```
+
+### 公式インストールスクリプトでインストール
+
+Homebrew を使わない場合：
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+詳細は [uv 公式ドキュメント](https://docs.astral.sh/uv/) を参照してください。
+uv は Python ランタイム自体も管理するため、別途 Python をインストールする
+必要はありません。
 
 ## インストール / 実行
 
 ### ソースからの実行（推奨）
-
-[uv](https://github.com/astral-sh/uv) をインストールしておいてください。
 
 ```bash
 git clone https://github.com/owlayer-com/pdf-hanko.git
@@ -123,11 +162,49 @@ src/pdfhanko/
 ├── rendering.py        # pypdfium2 ラッパ
 ├── signing.py          # PyHanko ラッパ
 ├── storage.py          # ハンコ永続化
+├── logging_config.py   # ログ出力設定
+├── resources/
+│   ├── pdfhanko.png    # アイコン原本 (1024×1024)
+│   └── pdfhanko.icns   # macOS 用アイコン (build_icns.py で生成)
 └── windows/
     ├── main_window.py      # メインウィンドウ
     ├── pdf_view.py         # PDF 表示・押印 UI
     ├── register_window.py  # ハンコ登録/編集ダイアログ
     └── password_dialog.py  # パスワード入力モーダル
+
+scripts/
+├── generate_placeholder_icon.py  # 仮アイコン (朱色の丸印) の PNG を生成
+└── build_icns.py                 # PNG から .icns を生成
+```
+
+### アイコンの更新
+
+アプリアイコンは `src/pdfhanko/resources/pdfhanko.png` を原本として、
+専用スクリプトで macOS 用 `.icns` に変換する仕組みです。
+
+```bash
+# 1. デザインした PNG (1024×1024, RGBA 推奨) を以下のパスに配置
+#    src/pdfhanko/resources/pdfhanko.png
+
+# 2. PNG → .icns に変換 (16/32/64/128/256/512/1024 px をマルチサイズ同梱)
+uv run python scripts/build_icns.py
+
+# 3. .app バンドルに反映 (--update-resources がポイント)
+uv run briefcase update macOS --update-resources
+uv run briefcase build macOS
+```
+
+`build_icns.py` は入力 PNG をフルブリード（1024×1024 全面デザイン）とみなし、
+macOS Big Sur 以降のガイドラインに合わせて **約 82% に縮小・中央配置**します。
+これにより Dock や Launchpad で他の macOS アプリと並んだときに自然なサイズに
+なります。サイズ感を調整したい場合は
+[scripts/build_icns.py](scripts/build_icns.py) の `MACOS_SAFE_AREA_RATIO`
+（デフォルト `0.824`）を 0.80〜0.95 の範囲で変更してください。
+
+仮アイコン（朱色の丸印 + 「印」）を再生成したい場合は次を実行します：
+
+```bash
+uv run python scripts/generate_placeholder_icon.py
 ```
 
 ### リリースビルドの作成（メンテナ向け）
@@ -139,8 +216,10 @@ GitHub Releases に添付する `.dmg` を作成する手順：
 #    [project] section の version = "X.Y.Z" を新バージョンに書き換える
 
 # 2. Briefcase でビルド + パッケージング (ad-hoc 署名)
-uv run briefcase update macOS      # 直近のソース変更を反映
-uv run briefcase build macOS       # .app バンドルをビルド
+#    アイコン (src/pdfhanko/resources/pdfhanko.icns) を更新した場合は
+#    --update-resources を併用する
+uv run briefcase update macOS --update-resources   # ソース + アイコンを反映
+uv run briefcase build macOS                       # .app バンドルをビルド
 uv run briefcase package macOS --adhoc-sign
 
 # 出力: dist/PDF Hanko-X.Y.Z.dmg (約 60 MB)
