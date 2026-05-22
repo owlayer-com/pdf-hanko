@@ -130,6 +130,34 @@ src/pdfhanko/
     └── password_dialog.py  # パスワード入力モーダル
 ```
 
+### リリースビルドの作成（メンテナ向け）
+
+GitHub Releases に添付する `.dmg` を作成する手順：
+
+```bash
+# 1. (必要なら) pyproject.toml の version を更新
+#    [project] section の version = "X.Y.Z" を新バージョンに書き換える
+
+# 2. Briefcase でビルド + パッケージング (ad-hoc 署名)
+uv run briefcase update macOS      # 直近のソース変更を反映
+uv run briefcase build macOS       # .app バンドルをビルド
+uv run briefcase package macOS --adhoc-sign
+
+# 出力: dist/PDF Hanko-X.Y.Z.dmg (約 60 MB)
+
+# 3. git タグ + GitHub Release を作成して .dmg を添付
+git tag vX.Y.Z
+git push origin vX.Y.Z
+gh release create vX.Y.Z \
+    --title "vX.Y.Z" \
+    --notes "リリースノート本文..." \
+    "dist/PDF Hanko-X.Y.Z.dmg"
+```
+
+`.dmg` には Apple Developer ID 署名は付与していません。利用者は
+[「macOS Gatekeeper の警告について」](#release-からダウンロードして使う場合-macos-gatekeeper-の警告について)
+の手順で起動する必要があります。リリースノートに同様の案内を含めると親切です。
+
 ## ライセンス
 
 [MIT License](LICENSE) — Copyright (c) 2026 owlayer-com
