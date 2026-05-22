@@ -1,6 +1,6 @@
 [project]
 name = "pdfhanko"
-version = "0.1.0"
+version = "0.1.1"
 description = "日本のハンコ文化に特化した PDF 電子署名アプリ"
 readme = "README.md"
 license = "MIT"
@@ -48,7 +48,7 @@ package = true
 [tool.briefcase]
 project_name = "PDF Hanko"
 bundle = "com.owlayer"
-version = "0.1.0"
+version = "0.1.1"
 url = "https://github.com/owlayer-com/pdf-hanko"
 author = "owlayer-com"
 author_email = "noreply@owlayer.com"
