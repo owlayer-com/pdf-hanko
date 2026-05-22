@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from pyhanko import stamp
-from pyhanko.pdf_utils import images
+from pyhanko.pdf_utils import images, layout
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
 
@@ -126,9 +126,19 @@ async def sign_pdf_with_signer(
             ),
         )
         meta = signers.PdfSignatureMetadata(field_name=field_name)
+        # PyHanko の BaseStampStyle.background_layout は既定で 5 pt の
+        # uniform margin を持つため、何も指定しないと署名矩形より一回り
+        # 小さく印影が描画されてしまう (24 mm 角 → 約 20 mm 角に縮小)。
+        # 矩形いっぱいに描画するためマージンをゼロに上書きする。
+        bg_layout = layout.SimpleBoxLayoutRule(
+            x_align=layout.AxisAlignment.ALIGN_MID,
+            y_align=layout.AxisAlignment.ALIGN_MID,
+            margins=layout.Margins.uniform(0),
+        )
         stamp_style = stamp.TextStampStyle(
             stamp_text="",
             background=images.PdfImage(str(hanko_image)),
+            background_layout=bg_layout,
             border_width=0,
         )
         pdf_signer = signers.PdfSigner(meta, signer=signer, stamp_style=stamp_style)

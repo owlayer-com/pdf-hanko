@@ -6,7 +6,27 @@
 
 ## [Unreleased]
 
-(現在 v0.1.0 リリース時点。次の変更点はここに追記します。)
+(次の変更点はここに追記します。)
+
+## [0.1.1] - 2026-05-22
+
+v0.1.0 リリース後に確認されたバグの修正と、UI の小幅な改善。
+
+### Fixed
+
+- 押印・署名後の PDF で印影が署名矩形より一回り小さく描画される問題を
+  修正 (PyHanko `BaseStampStyle.background_layout` の既定 5 pt
+  uniform margin を 0 で上書き)。24 mm 角の矩形が約 20 mm 角に縮んで
+  いた現象が解消されます。
+
+### Changed
+
+- ツールバーの配置を変更 — 「PDF を開く」「押印」を左寄せ、「ハンコを
+  登録...」を右寄せに分離し、操作頻度に合わせた導線へ整理。
+- ハンコ一覧の選択中の行を再度クリックすると選択を解除できるように
+  挙動を変更 (PDF 側のドラッグ操作も無効化)。
+- ハンコ未登録時の案内文、変更/削除ボタン幅・余白を微調整。
+- README を全体校正 — 語句の統一と自然な日本語表現への修正。
 
 ## [0.1.0] - 2026-05-22
 
@@ -46,5 +66,6 @@
 - 電子署名の法的有効性は使用する証明書・運用方法に依存します。重要な
   契約・法的書類で利用する場合は事前検証を強く推奨します。
 
-[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0

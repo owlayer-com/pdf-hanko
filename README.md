@@ -2,10 +2,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-日本のハンコ文化に特化した、macOS 向け PDF 電子署名アプリケーション。
+日本のハンコ文化に特化した、macOS 向けの PDF 電子署名アプリケーションです。
 
-あらかじめ登録した印影画像と PKCS#12 形式の証明書を用いて、PDF 上に
-「押印」操作で見た目のハンコと PAdES 準拠の電子署名を同時に付与します。
+あらかじめ登録した印影画像と PKCS#12 形式の証明書を使い、PDF 上での
+「押印」操作によって、見た目のハンコと PAdES 準拠の電子署名を同時に付与します。
 
 > ⚠️ **本ソフトウェアは MIT ライセンスで「無保証 (AS IS)」で提供されます。**
 > 電子署名の法的有効性は、使用する証明書・運用方法・受領者側の検証環境などに
@@ -14,15 +14,15 @@
 
 ## 主な機能
 
-- **ハンコ登録**: 印影画像 + PKCS#12 証明書 + 名前・サイズを登録・編集・削除
-- **PDF 押印**: PDF を表示 → ドラッグで押印位置を指定 → 1 クリックで視覚ハンコ + PAdES 電子署名を同時付与
-- **複数押印 / 再署名**: 既に署名済みの PDF にもさらに押印可能（甲乙押印、割印、複数ページ押印に対応）
-- **完全ローカル動作**: ネット通信なし。PDF・印影・証明書・パスワードはすべて Mac 内のみで処理
+- **ハンコ登録**: 印影画像、PKCS#12 証明書、名前、サイズを登録・編集・削除
+- **PDF への押印**: PDF を表示し、ドラッグで押印位置を指定して、1 クリックで見た目のハンコと PAdES 電子署名を同時に付与
+- **複数押印 / 再署名**: すでに署名済みの PDF にも追加で押印可能（甲乙押印、複数ページ押印に対応）
+- **完全ローカル動作**: ネットワーク通信なし。PDF・印影・証明書・パスワードはすべて Mac 内のみで処理
 
 ## プライバシー
 
 本アプリはいかなるネットワーク通信も行いません。すべてのデータ（PDF・印影画像・
-証明書・パスワード）は使用者の Mac 内のみで処理され、外部に送信されることは
+証明書・パスワード）は利用者の Mac 内のみで処理され、外部に送信されることは
 ありません。設定ファイルは `~/Library/Application Support/PdfHanko/` 配下に
 保存されます。
 
@@ -35,7 +35,7 @@ PKCS#12 証明書のパスワードは永続化されず、署名処理中のみ
 
 ## ダウンロード
 
-最新版は [v0.1.0 リリースページ](https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0)
+最新版は [v0.1.0 のリリースページ](https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0)
 から `PDF Hanko-0.1.0.dmg`（約 63 MB）をダウンロードできます。すべてのリリースは
 [Releases 一覧](https://github.com/owlayer-com/pdf-hanko/releases) を参照してください。
 
@@ -47,15 +47,15 @@ PKCS#12 証明書のパスワードは永続化されず、署名処理中のみ
 4. `Applications` から `PDF Hanko.app` を起動
 
 初回起動時は macOS Gatekeeper の警告が表示されます。下記の
-「[macOS Gatekeeper の警告について](#release-からダウンロードして使う場合-macos-gatekeeper-の警告について)」
+「[macOS Gatekeeper の警告について](#releases-からダウンロードして使う場合-macos-gatekeeper-の警告について)」
 を参照してください。
 
 ## 事前準備
 
 「ソースから実行する」「`.app` バンドルを自分でビルドする」場合は、いずれも
 パッケージマネージャの [uv](https://github.com/astral-sh/uv) が必要です。
-uv は本プロジェクトの依存解決・仮想環境管理・Python ランタイムのセット
-アップをすべて担当します。
+uv は本プロジェクトの依存関係の解決、仮想環境の管理、Python ランタイムのセットアップを
+すべて担当します。
 
 > ℹ️ リリース版の `.dmg` をダウンロードして使うだけなら uv は不要です。
 
@@ -100,7 +100,7 @@ uv run briefcase run macOS
 # .app バンドルは build/pdfhanko/macos/app/ 配下に生成される
 ```
 
-### Release からダウンロードして使う場合: macOS Gatekeeper の警告について
+### Releases からダウンロードして使う場合: macOS Gatekeeper の警告について
 
 GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署名が
 付与されていません**。そのため、`.dmg` を開いた後に展開された `PDF Hanko.app`
@@ -108,9 +108,9 @@ GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署�
 開けません」など）が表示されます。
 
 これは本アプリに限らず、署名されていない macOS アプリで発生する一般的な挙動です。
-回避方法は以下の通りです：
+起動方法は以下の通りです：
 
-#### 方法 1: 右クリックから開く（macOS Sonoma 14 以前で確実）
+#### 方法 1: 右クリックから開く（macOS Sonoma 14 以前で有効）
 
 1. `.dmg` を開き、`PDF Hanko.app` を `Applications` フォルダにドラッグしてインストール
 2. Finder で `Applications/PDF Hanko.app` を **右クリック（または control + クリック）**
@@ -120,9 +120,9 @@ GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署�
 一度この手順を実行すれば、以降は通常通り Dock / Launchpad からダブルクリックで
 起動できます。
 
-#### 方法 2: システム設定から許可（macOS Sequoia 15 以降で必要なことが多い）
+#### 方法 2: システム設定から許可（macOS Sequoia 15 以降で必要になることが多い）
 
-新しい macOS では方法 1 が制限されているため、システム設定からの許可が必要です：
+新しい macOS では方法 1 が制限されることがあるため、システム設定からの許可が必要です：
 
 1. `.dmg` を開き、`PDF Hanko.app` を `Applications` フォルダにドラッグしてインストール
 2. 通常通り `PDF Hanko.app` をダブルクリックする → 警告が表示される（OK を押して閉じる）
@@ -133,13 +133,13 @@ GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署�
 5. Touch ID または管理者パスワードで認証
 6. 再度 `PDF Hanko.app` をダブルクリックすると起動できる
 
-#### 方法 3: 自分でソースからビルドする（最も安全）
+#### 方法 3: 自分でソースからビルドする（内容を確認しやすい方法）
 
 警告を回避する最もシンプルな方法は、自分でソースからビルドすることです。
 上記「ソースからの実行」または「`.app` バンドルを自分でビルド」の手順に従って
-ください。コードは公開されているので、安心して使えます。
+ください。コードは公開されているため、内容を確認したうえで利用できます。
 
-> ℹ️ 商用のように毎回 Developer ID 署名と Apple の公証を行う運用は、本 OSS
+> ℹ️ 商用アプリのように毎回 Developer ID 署名と Apple の公証を行う運用は、本 OSS
 > プロジェクトでは行っていません。これが気になる方は、ソースから自分で
 > ビルドして利用することを推奨します。
 
@@ -149,7 +149,7 @@ GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署�
 2. 「ハンコを登録...」から印影画像と PKCS#12 証明書を登録する
 3. 「PDF を開く...」で署名対象の PDF を選ぶ
 4. 右ペインのハンコをクリックして選択する
-5. PDF 上で押印したい位置にマウスをドラッグ → 離した位置に押印プレビューが出る
+5. PDF 上で押印したい位置までマウスをドラッグ → 離した位置に押印プレビューが表示される
 6. 「署名して保存...」をクリック → 保存先・パスワード入力 → 完了
 
 ## 開発
@@ -170,7 +170,7 @@ src/pdfhanko/
 ├── storage.py          # ハンコ永続化
 ├── logging_config.py   # ログ出力設定
 ├── resources/
-│   ├── pdfhanko.png    # アイコン原本 (1024×1024)
+│   ├── pdfhanko.png    # アイコン元画像 (1024×1024)
 │   └── pdfhanko.icns   # macOS 用アイコン (build_icns.py で生成)
 └── windows/
     ├── main_window.py      # メインウィンドウ
@@ -185,7 +185,7 @@ scripts/
 
 ### アイコンの更新
 
-アプリアイコンは `src/pdfhanko/resources/pdfhanko.png` を原本として、
+アプリアイコンは `src/pdfhanko/resources/pdfhanko.png` を元画像として、
 専用スクリプトで macOS 用 `.icns` に変換する仕組みです。
 
 ```bash
@@ -200,7 +200,7 @@ uv run briefcase update macOS --update-resources
 uv run briefcase build macOS
 ```
 
-`build_icns.py` は入力 PNG をフルブリード（1024×1024 全面デザイン）とみなし、
+`build_icns.py` は入力 PNG をフルブリード（1024×1024 の全面デザイン）とみなし、
 macOS Big Sur 以降のガイドラインに合わせて **約 82% に縮小・中央配置**します。
 これにより Dock や Launchpad で他の macOS アプリと並んだときに自然なサイズに
 なります。サイズ感を調整したい場合は
@@ -239,8 +239,8 @@ gh release create vX.Y.Z \
     "dist/PDF Hanko-X.Y.Z.dmg"
 ```
 
-`.dmg` には Apple Developer ID 署名は付与していません。利用者は
-[「macOS Gatekeeper の警告について」](#release-からダウンロードして使う場合-macos-gatekeeper-の警告について)
+`.dmg` には Apple Developer ID 署名を付与していません。利用者は
+[「macOS Gatekeeper の警告について」](#releases-からダウンロードして使う場合-macos-gatekeeper-の警告について)
 の手順で起動する必要があります。リリースノートに同様の案内を含めると親切です。
 
 ## ライセンス
