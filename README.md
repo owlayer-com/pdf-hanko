@@ -42,9 +42,9 @@ PKCS#12 証明書のパスワードは永続化されず、署名処理中のみ
 
 ## ダウンロード
 
-最新版は [v0.1.0 のリリースページ](https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0)
-から `PDF Hanko-0.1.0.dmg`（約 63 MB）をダウンロードできます。すべてのリリースは
-[Releases 一覧](https://github.com/owlayer-com/pdf-hanko/releases) を参照してください。
+[Releases 一覧](https://github.com/owlayer-com/pdf-hanko/releases) から最新版の
+`PDF Hanko-X.Y.Z.dmg`（約 60 MB）をダウンロードできます。通常はページ最上部の
+"Latest" と表示されているリリースが最新版です。
 
 ### インストール手順
 
