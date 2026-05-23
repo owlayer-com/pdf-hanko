@@ -4,7 +4,7 @@ version = "0.1.2"
 description = "日本のハンコ文化に特化した PDF 電子署名アプリ"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE.md"]
 requires-python = ">=3.11.14,<3.13"
 authors = [{ name = "owlayer-com" }]
 keywords = ["pdf", "hanko", "signature", "pades", "japan", "stamp", "macos"]

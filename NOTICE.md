@@ -15,6 +15,7 @@ full text of each license is included below.
 | Component | Version | License | Project URL |
 |---|---|---|---|
 | PyHanko | 0.35.x | MIT | https://github.com/MatthiasValvekens/pyHanko |
+| Original PyPDF2-derived portions in PyHanko | — | BSD-3-Clause | https://github.com/py-pdf/pypdf |
 | pypdfium2 | 5.x | Apache-2.0 / BSD-3-Clause (PDFium) | https://github.com/pypdfium2-team/pypdfium2 |
 | Toga | 0.5.x | BSD-3-Clause | https://github.com/beeware/toga |
 | Pillow | 12.x | HPND | https://github.com/python-pillow/Pillow |
@@ -47,7 +48,51 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
-## 2. pypdfium2
+## 2. Original PyPDF2 License Notice in PyHanko
+
+PyHanko contains various elements based on code from the PyPDF2
+project. PyHanko reproduces the following license notice for those
+portions.
+
+Copyright (c) 2006-2008, Mathieu Fenniak
+
+Some contributions copyright (c) 2007, Ashish Kulkarni
+<kulkarni.ashish@gmail.com>
+
+Some contributions copyright (c) 2014, Steve Witham
+<switham_github@mac-guyver.com>
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+* Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in
+  the documentation and/or other materials provided with the
+  distribution.
+* The name of the author may not be used to endorse or promote
+  products derived from this software without specific prior written
+  permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+## 3. pypdfium2
 
 Copyright (c) 2024 pypdfium2-team
 
@@ -98,7 +143,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
-## 3. Toga / BeeWare
+## 4. Toga / BeeWare
 
 Copyright (c) 2014-2026, Russell Keith-Magee and the BeeWare contributors.
 
@@ -130,7 +175,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
-## 4. Pillow
+## 5. Pillow
 
 The Python Imaging Library (PIL) is
 
@@ -166,14 +211,14 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ---
 
-## 5. cryptography
+## 6. cryptography
 
 This software is made available under the terms of *either* of the
 following licenses. You may use it under the terms of either license
 at your option.
 
-- Apache License, Version 2.0 (see component 2 above for full text)
-- BSD-3-Clause (see component 3 above for full text)
+- Apache License, Version 2.0 (see component 3 above for full text)
+- BSD-3-Clause (see component 4 above for full text)
 
 Copyright (c) Individual contributors. All rights reserved.
 
