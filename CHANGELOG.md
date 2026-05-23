@@ -8,6 +8,21 @@
 
 (次の変更点はここに追記します。)
 
+## [0.1.2] - 2026-05-23
+
+v0.1.1 リリース後に確認された終了時クラッシュの修正。
+
+### Fixed
+
+- アプリ終了時に `EXC_BAD_ACCESS (SIGSEGV)` でクラッシュする問題を修正。
+  Toga / rubicon-objc と Cocoa の autorelease pool 終了タイミングの競合により、
+  Python finalize 後に pool 内オブジェクトの dealloc が死んだ
+  `PyInterpreterState` を参照していた。`main_loop()` 終了直後に
+  `logging.shutdown()` + `os._exit()` で即時終了する形に変更
+  ([src/pdfhanko/__main__.py](src/pdfhanko/__main__.py))。
+  HankoStore は変更時に都度永続化しているため通常 shutdown を経由
+  しなくてもデータ整合性に影響はない。
+
 ## [0.1.1] - 2026-05-22
 
 v0.1.0 リリース後に確認されたバグの修正と、UI の小幅な改善。
@@ -66,6 +81,7 @@ v0.1.0 リリース後に確認されたバグの修正と、UI の小幅な改�
 - 電子署名の法的有効性は使用する証明書・運用方法に依存します。重要な
   契約・法的書類で利用する場合は事前検証を強く推奨します。
 
-[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0
