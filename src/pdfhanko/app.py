@@ -13,8 +13,35 @@ import toga
 
 from . import __version__
 from .logging_config import LOG_DIR, setup_logging
+from .settings import AppSettings
 from .storage import HankoStore
 from .windows.main_window import MainWindow
+
+SHOW_FIELD_MENU_LABEL = "pyHanko --field 表示"
+"""「表示」メニューに置く --field トグル項目のベースラベル。"""
+
+CHECK_MARK_PREFIX = "✓ "
+"""ON 状態を示すラベル先頭の印。Toga には標準のチェック式メニューが無いため
+ラベル先頭文字を切り替えて代用する。"""
+
+
+def _disable_window_tabbing() -> None:
+    """macOS の View メニューに自動挿入される『Show Tab Bar』を抑制する。
+
+    Cocoa は ``NSWindow.allowsAutomaticWindowTabbing`` が True (既定) のとき
+    View メニューに『Show Tab Bar』『New Tab』等を勝手に挿入する。本アプリは
+    ウィンドウタブを使わないため、メインウィンドウを構築する前に False に
+    切り替えて挿入自体を止める。
+
+    macOS 以外 (rubicon-objc が無い・NSWindow が無い) の環境では何もしない。
+    """
+    try:
+        from rubicon.objc import ObjCClass
+
+        NSWindow = ObjCClass("NSWindow")
+        NSWindow.setAllowsAutomaticWindowTabbing_(False)
+    except Exception:
+        logger.debug("Window tabbing 抑制に失敗 (非 macOS 環境とみなす)", exc_info=True)
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +86,24 @@ class PdfHankoApp(toga.App):
     """
 
     store: HankoStore
+    settings: AppSettings
     main_window_obj: MainWindow
 
     def startup(self) -> None:
         """Toga フレームワークから呼ばれる起動フック。
 
-        ハンコストアを読み込み、メインウィンドウを構築して表示する。
+        ハンコストアと設定を読み込み、メインウィンドウを構築して表示する。
         About コマンドのアクションを差し替え、アプリ固有のダイアログを出す。
         """
+        # MainWindow 生成前に呼ぶ必要がある。View メニューへの『Show Tab Bar』
+        # 自動挿入を抑制する (Cocoa の NSWindow が tabbing を有効にしている時に
+        # 自動で項目を追加する挙動)。
+        _disable_window_tabbing()
+
         self.store = HankoStore()
         self.store.load()
+        self.settings = AppSettings()
+        self.settings.load()
 
         self.main_window_obj = MainWindow(self)
         self.main_window = self.main_window_obj.window
@@ -94,6 +129,15 @@ class PdfHankoApp(toga.App):
             )
         )
 
+        # 「表示」メニューに pyHanko CLI 引数表示のトグルを追加する。
+        self._show_field_command = toga.Command(
+            self._on_toggle_show_field,
+            text=self._show_field_menu_text(self.settings.show_field),
+            tooltip="押印位置を pyHanko CLI の --field 引数形式で表示する",
+            group=toga.Group.VIEW,
+        )
+        self.commands.add(self._show_field_command)
+
     def _on_about(self, widget) -> None:
         """About ダイアログを表示する (同期ハンドラ)。
 
@@ -110,6 +154,50 @@ class PdfHankoApp(toga.App):
             webbrowser.open(HELP_URL)
         except Exception:
             logger.exception("ヘルプ URL を開けませんでした: %s", HELP_URL)
+
+    @staticmethod
+    def _show_field_menu_text(enabled: bool) -> str:
+        """--field 表示メニューのラベル文字列を返す。
+
+        Toga の :class:`toga.Command` には標準のチェック表示が無いため、
+        ON 時にはラベル先頭に :data:`CHECK_MARK_PREFIX` を付ける。
+        """
+        return (CHECK_MARK_PREFIX if enabled else "") + SHOW_FIELD_MENU_LABEL
+
+    def _on_toggle_show_field(self, widget) -> None:
+        """「表示」メニューの --field 表示トグル押下時のハンドラ。
+
+        設定値を反転し、永続化したうえで PdfView の表示状態を更新する。
+        """
+        self.settings.show_field = not self.settings.show_field
+        self.settings.save()
+        label = self._show_field_menu_text(self.settings.show_field)
+        self._show_field_command.text = label
+        self._apply_show_field_menu_title(label)
+        self.main_window_obj.pdf_view.set_show_field(self.settings.show_field)
+
+    def _apply_show_field_menu_title(self, label: str) -> None:
+        """ネイティブ NSMenuItem のタイトルを直接書き換える。
+
+        Toga の :class:`toga.Command` は ``text`` を単なる属性として保持しており、
+        書き換えても Cocoa 側の ``NSMenuItem`` の title には反映されない。
+        rubicon-objc 経由で ``setTitle_`` を呼んで動的に同期する。
+
+        Args:
+            label: 新しいメニューラベル。
+        """
+        impl = getattr(self._show_field_command, "_impl", None)
+        natives = getattr(impl, "native", None) if impl is not None else None
+        if not natives:
+            return
+        for native in natives:
+            setter = getattr(native, "setTitle_", None)
+            if setter is None:
+                continue
+            try:
+                setter(label)
+            except Exception:
+                logger.exception("メニューラベルの更新に失敗しました")
 
     def on_exit(self) -> bool:
         """アプリ終了直前のフック。ネイティブリソースを明示的に解放する。

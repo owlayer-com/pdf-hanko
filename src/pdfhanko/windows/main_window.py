@@ -153,6 +153,7 @@ class MainWindow:
         self.selected_hanko: Hanko | None = None
         self.pdf_view = PdfView(on_status_change=self._on_pdf_status_change)
         self.pdf_view.on_close_pdf_callback = self._after_pdf_close
+        self.pdf_view.set_show_field(self.app.settings.show_field)
 
         self.open_pdf_btn = toga.Button(
             "PDF を開く...", on_press=self._on_open_pdf, style=Pack(margin=4),

@@ -42,6 +42,15 @@ PAGE_BG = "#ffffff"
 AREA_BG = "#e0e0e0"
 """PDF 外側 (スクロール領域) の背景色。"""
 
+FIELD_PLACEHOLDER_NAME = "[sign-name]"
+"""pyHanko CLI ``--field`` 引数のフィールド名プレースホルダ。
+
+実際の署名時には署名フィールド名を別途生成しているため、CLI に流用する
+際にユーザーが任意の名前へ置換することを想定する。"""
+
+FIELD_LABEL_PENDING_TEXT = "--field (押印位置未確定)"
+"""押印位置が未確定 / PDF 未読込の時に ``--field`` ラベルへ出すテキスト。"""
+
 
 class PdfView:
     """PDF を表示し、押印位置を取得する UI コンポーネント。
@@ -123,6 +132,20 @@ class PdfView:
             style=Pack(direction=ROW, margin=4, align_items="center"),
             children=[],
         )
+        # pyHanko CLI --field 引数表示用の 1 行ステータスラベル。
+        # 既定では非表示で、set_show_field(True) のときだけ container 末尾に
+        # 挿入される。等幅フォントにすることでコピー&ペースト時の見やすさを優先。
+        self.show_field: bool = False
+        self.field_label = toga.Label(
+            FIELD_LABEL_PENDING_TEXT,
+            style=Pack(
+                margin=(2, 8),
+                font_family="monospace",
+                font_size=11,
+            ),
+        )
+        self._field_label_visible = False
+
         self.container = toga.Box(
             style=Pack(direction=COLUMN, flex=1),
             children=[self.scroll],
@@ -211,6 +234,24 @@ class PdfView:
         self._redraw()
         self._emit_status()
 
+    def set_show_field(self, enabled: bool) -> None:
+        """pyHanko CLI ``--field`` 引数表示の可視性を切り替える。
+
+        ON のとき :attr:`container` の末尾に :attr:`field_label` を追加し、
+        OFF のとき取り外す。表示内容は :meth:`_update_field_label` で更新する。
+
+        Args:
+            enabled: True で表示、False で非表示。
+        """
+        self.show_field = enabled
+        if enabled and not self._field_label_visible:
+            self.container.add(self.field_label)
+            self._field_label_visible = True
+        elif not enabled and self._field_label_visible:
+            self.container.remove(self.field_label)
+            self._field_label_visible = False
+        self._update_field_label()
+
     def has_pending(self) -> bool:
         """押印位置が確定済みかどうかを返す。
 
@@ -222,7 +263,13 @@ class PdfView:
     # ---- 内部処理 ----
 
     def _emit_status(self) -> None:
-        """現在の状態を ``on_status_change`` 経由で外部に通知する。"""
+        """現在の状態を ``on_status_change`` 経由で外部に通知する。
+
+        合わせて --field ステータスラベルも更新する。状態変化を起こす
+        全パスがこのメソッドを通っているため、ラベル更新の合流点として
+        利用している。
+        """
+        self._update_field_label()
         if self._on_status_change is None:
             return
         if self.doc is None or self.doc_path is None:
@@ -236,6 +283,23 @@ class PdfView:
         if self.pending_box_pdf is not None:
             parts.append(f"押印位置 {self.pending_box_pdf}")
         self._on_status_change(" | ".join(parts))
+
+    def _update_field_label(self) -> None:
+        """pyHanko CLI ``--field`` 引数文字列をラベルへ反映する。
+
+        非表示時は何もしない。PDF 未読込・押印位置未確定の場合は
+        :data:`FIELD_LABEL_PENDING_TEXT` を表示する。
+        """
+        if not self.show_field:
+            return
+        if self.doc is None or self.pending_box_pdf is None:
+            self.field_label.text = FIELD_LABEL_PENDING_TEXT
+            return
+        page = self.page_index + 1
+        x0, y0, x1, y1 = self.pending_box_pdf
+        self.field_label.text = (
+            f'--field "{page}/{x0},{y0},{x1},{y1}/{FIELD_PLACEHOLDER_NAME}"'
+        )
 
     def _render_current_page(self) -> None:
         """現ページをレンダリングして Canvas サイズを更新する。"""
