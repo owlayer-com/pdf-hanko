@@ -24,6 +24,7 @@
 - **ハンコ登録**: 印影画像、PKCS#12 証明書、名前、サイズを登録・編集・削除
 - **PDF への押印**: PDF を表示し、ドラッグで押印位置を指定して、1 クリックで見た目のハンコと PAdES 電子署名を同時に付与
 - **複数押印 / 再署名**: すでに署名済みの PDF にも追加で押印可能（甲乙押印、複数ページ押印に対応）
+- **pyHanko CLI 連携**: 「表示」メニューから、確定した押印位置を pyHanko CLI の `--field` 引数形式で表示・コピーできます（CLI でのバッチ署名に流用可）
 - **完全ローカル動作**: ネットワーク通信なし。PDF・印影・証明書・パスワードはすべて Mac 内のみで処理
 
 ## プライバシー
@@ -158,6 +159,71 @@ GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署�
 4. 右ペインのハンコをクリックして選択する
 5. PDF 上で押印したい位置までマウスをドラッグ → 離した位置に押印プレビューが表示される
 6. 「署名して保存...」をクリック → 保存先・パスワード入力 → 完了
+
+## pyHanko CLI で同じ押印位置を再現する
+
+GUI で決めた押印位置を pyHanko CLI に渡せば、同じ場所に署名するバッチ処理が
+組めます。
+
+1. メニューバーの「表示」 →「pyHanko --field 表示」を ON にする
+2. PDF 上で押印位置を決めると、ビューア下部に CLI 引数が表示される
+   （例: `--field "1/470,630,530,690/[sign-name]"`）
+3. テキストを選択してコピーし、`[sign-name]` 部分は任意の署名フィールド名に
+   置換して pyHanko CLI に渡す
+
+`--field` の書式は `PAGE/X1,Y1,X2,Y2/NAME` です。`[sign-name]` は **PDF 内部で
+署名フィールドを識別するための名前** で、同一 PDF 内で重複しなければ任意の
+文字列を指定できます（例: `Sign1`、`Signature1`、`CompanySeal` など）。
+既に署名済みの PDF に追加で署名する場合は、既存フィールド名と衝突しない名前を
+選んでください。
+
+### 注意: 本アプリと同じ大きさで押印する
+
+PyHanko の既定スタンプスタイルは、矩形の四辺に 5 pt のマージンと
+60% 透過の背景を入れるため、本アプリの出力よりも一回り小さく・薄く
+仕上がります。本アプリと同じ大きさ・濃度で押印するには、`pyhanko.yml`
+の `stamp-styles` で **背景マージンを 0 に、不透明度を 1 に** 上書きして
+ください。
+
+```yaml
+stamp-styles:
+    mystyle:
+        stamp-text: ""
+        background: hanko.png
+        background-opacity: 1
+        border-width: 0
+        background-layout:
+            margins: {left: 0, right: 0, top: 0, bottom: 0}
+```
+
+CLI 実行時はこのスタイルを `--style-name mystyle` で参照します。`hanko.png`
+には本アプリで登録したものと同じ印影画像（72 DPI 推奨）を指定してください。
+
+### コマンド例
+
+`pyhanko.yml`（上のサンプル）と PDF・印影画像・PKCS#12 証明書を同じディレクトリに
+置いた状態で、本アプリと同等の見た目で署名するコマンド例：
+
+```bash
+pyhanko --config pyhanko.yml sign addsig \
+    --field "1/470,630,530,690/Sign1" \
+    --style-name mystyle \
+    --use-pades \
+    pkcs12 input.pdf output.pdf cert.p12
+```
+
+- `--config pyhanko.yml`: スタンプスタイル定義を読み込む。設定ファイル名を
+  `pyhanko.yml`（pyhanko のデフォルト名）にし、カレントディレクトリに置けば
+  本オプションは省略可能
+- `--field "..."`: 本アプリのステータス行からコピーした文字列を貼り付け、
+  末尾の `[sign-name]` を任意のフィールド名（ここでは `Sign1`）に置換
+- `--style-name mystyle`: `pyhanko.yml` で定義したスタイル名を参照
+- `--use-pades`: 本アプリと同じく PAdES 準拠で署名する
+- `pkcs12 input.pdf output.pdf cert.p12`: PKCS#12 認証で `input.pdf` を読み、
+  `cert.p12` で署名し `output.pdf` を出力する
+
+PKCS#12 のパスフレーズは標準入力か `--passfile` で渡します（詳細は
+`pyhanko sign addsig pkcs12 --help`）。
 
 ## 開発
 
