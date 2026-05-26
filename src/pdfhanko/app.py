@@ -88,10 +88,9 @@ class PdfHankoApp(toga.App):
     store: HankoStore
     settings: AppSettings
     main_window_obj: MainWindow
-    # Cmd+Q (on_exit) で確認ダイアログ後にユーザーが OK を押した時のフラグ。
-    # True の間は再度 on_exit が呼ばれてもダイアログを出さずに通常終了を許可する
-    # (無限ループ防止)。
     _quit_confirmed: bool = False
+    """終了確認ダイアログで OK を選んだ後に再入する :meth:`on_exit` で、
+    ダイアログを再表示せず通常終了に進ませるためのフラグ (無限ループ防止)。"""
 
     def startup(self) -> None:
         """Toga フレームワークから呼ばれる起動フック。
@@ -99,9 +98,8 @@ class PdfHankoApp(toga.App):
         ハンコストアと設定を読み込み、メインウィンドウを構築して表示する。
         About コマンドのアクションを差し替え、アプリ固有のダイアログを出す。
         """
-        # MainWindow 生成前に呼ぶ必要がある。View メニューへの『Show Tab Bar』
-        # 自動挿入を抑制する (Cocoa の NSWindow が tabbing を有効にしている時に
-        # 自動で項目を追加する挙動)。
+        # MainWindow 生成前に呼ぶ必要がある。Cocoa の NSWindow が tabbing
+        # 有効時に View メニューへ自動挿入する『Show Tab Bar』等の項目を抑制する。
         _disable_window_tabbing()
 
         self.store = HankoStore()
@@ -113,16 +111,15 @@ class PdfHankoApp(toga.App):
         self.main_window = self.main_window_obj.window
         self.main_window.show()
 
-        # macOS の標準 "About PDF Hanko" メニュー項目を、自前の
-        # ダイアログでオーバーライドする。Toga が自動で挿入する Command の
-        # action だけを差し替える形。
+        # macOS の "About PDF Hanko" メニュー項目は、Toga が自動挿入する
+        # Command の action だけを自前のダイアログハンドラに差し替えて使う。
         try:
             self.commands[toga.Command.ABOUT].action = self._on_about
         except KeyError:
-            # ABOUT コマンドが定義されていないプラットフォームでは無視
+            # ABOUT コマンドが定義されていないプラットフォームでは何もしない
             pass
 
-        # 「ヘルプ」メニューに GitHub の README を開く項目を追加する。
+        # 「ヘルプ」メニュー配下に GitHub の README を開く項目を持つ。
         # macOS では Help メニュー配下に自動配置される。
         self.commands.add(
             toga.Command(
@@ -133,10 +130,10 @@ class PdfHankoApp(toga.App):
             )
         )
 
-        # 「File」メニューにツールバーボタンと同じ操作を追加する。
-        # ハンドラは MainWindow 側の実装を再利用 (async でも Toga が await する)。
+        # 「File」メニュー配下に、ツールバーボタンと同じ操作を持たせる。
+        # ハンドラは MainWindow 側の実装を共有する (async でも Toga が await する)。
         # section / order は toga_cocoa の StandardCommand.OPEN / SAVE_AS と
-        # 同じ位置 (section=0/30) に揃えて macOS の作法に合わせる。
+        # 同じ位置 (section=0/30) に揃え、macOS の作法に従う。
         self.commands.add(
             toga.Command(
                 self.main_window_obj._on_open_pdf,
@@ -149,7 +146,7 @@ class PdfHankoApp(toga.App):
             )
         )
         # 「署名して保存」はツールバー側ボタンと同じく、押印位置・ハンコ選択・
-        # PDF 読込の 3 条件が揃うまで disable しておく。状態同期は
+        # PDF 読込の 3 条件が揃うまで非活性とする。状態同期は
         # MainWindow._on_pdf_status_change から行う。
         self._sign_command = toga.Command(
             self.main_window_obj._on_sign,
@@ -163,7 +160,7 @@ class PdfHankoApp(toga.App):
         )
         self.commands.add(self._sign_command)
 
-        # 「表示」メニューに pyHanko CLI 引数表示のトグルを追加する。
+        # 「表示」メニュー配下に pyHanko CLI 引数表示のトグルを持つ。
         self._show_field_command = toga.Command(
             self._on_toggle_show_field,
             text=self._show_field_menu_text(self.settings.show_field),

@@ -151,12 +151,12 @@ class MainWindow:
         """
         self.app = app
         # 直近の署名保存時の (ページ番号, 矩形, ハンコ ID) スナップショット。
-        # クローズ時に現状と比較し、一致していれば「未保存ではない」と判断する。
-        # PDF を開き直すなどで意味を失うタイミングでは None にリセットする。
+        # クローズ時に現状と比較し、一致していれば「未保存ではない」と判定する。
+        # PDF を開き直すなど意味を失うタイミングでは None に戻す。
         self._last_saved_state: tuple | None = None
         self.window = toga.MainWindow(title=BASE_TITLE, size=(1200, 900))
-        # File > Close (Cmd+W) / Close All を「PDF を閉じる」に振り向ける。
-        # PDF が開いていない時はウィンドウクローズを許可してアプリ終了させる。
+        # File > Close (Cmd+W) / Close All / 左上の赤ボタンはいずれも本ハンドラに
+        # 到達する。未保存があれば確認ダイアログを挟んだうえでアプリを終了させる。
         self.window.on_close = self._on_main_window_close
         self.selected_hanko: Hanko | None = None
         self.pdf_view = PdfView(on_status_change=self._on_pdf_status_change)
@@ -235,7 +235,7 @@ class MainWindow:
         """
         enabled = self.pdf_view.has_pending() and self.selected_hanko is not None
         self.sign_btn.enabled = enabled
-        # File メニュー側の「PDF に署名して保存...」コマンドも同じ条件で同期。
+        # ツールバーと File メニューの「署名して保存」を同一条件で活性制御する。
         sign_command = getattr(self.app, "_sign_command", None)
         if sign_command is not None:
             sign_command.enabled = enabled
@@ -391,9 +391,9 @@ class MainWindow:
             True ならウィンドウを閉じる (= 単一ウィンドウ構成なのでアプリ終了)、
             False ならクローズ保留 (= 確認ダイアログ経由で改めて exit を呼ぶ)。
         """
-        # 「押印確定済み」かつ「直近保存時のスナップショットと不一致」のときだけ
-        # 未保存とみなす。保存直後はスナップショットと一致するためダイアログを
-        # 出さず即終了できる。
+        # 押印確定済み、かつ直近保存時のスナップショットと不一致のときだけ
+        # 未保存とみなす。保存直後はスナップショットと一致するため、ダイアログを
+        # 出さず即終了する。
         if not self.has_unsaved_changes():
             return True
         asyncio.create_task(self._confirm_unsaved_then_exit())
@@ -491,7 +491,7 @@ class MainWindow:
                 toga.ErrorDialog("PDF を開けません", str(e))
             )
             return
-        # 別の PDF を開いたら保存スナップショットは無効化する。
+        # 別の PDF を開いたタイミングで保存スナップショットは無効になる。
         self._last_saved_state = None
         self.window.title = f"{BASE_TITLE} - {Path(path).name}"
 
@@ -562,9 +562,9 @@ class MainWindow:
             await self.window.dialog(toga.ErrorDialog("署名に失敗", str(e)))
             return
 
-        # 保存完了 → 現在の (ページ, 矩形, ハンコ ID) をスナップショットとして
-        # 記録する。クローズ時にこのスナップショットと現状を比較して、
-        # 一致していれば未保存ではないと判断する (印影プレビューは残す)。
+        # 保存完了時点の (ページ, 矩形, ハンコ ID) をスナップショットとして
+        # 記録する。クローズ時にこのスナップショットと現状を比較し、
+        # 一致していれば未保存ではないと判定する (印影プレビューは残す)。
         self._last_saved_state = self._current_stamp_state()
 
         await self.window.dialog(

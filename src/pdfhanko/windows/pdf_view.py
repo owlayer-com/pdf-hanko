@@ -89,9 +89,9 @@ class PdfView:
         self.click_canvas: tuple[float, float] | None = None
         self.pending_box_pdf: tuple[int, int, int, int] | None = None
         self.interactive: bool = True
-        # マウスを離して押印位置が確定した直後だけ True にする。
+        # マウスを離して押印位置が確定した直後だけ True を取る。
         # True の間はプレビューを画像本来の濃度 (不透明) で描画し、最終的な
-        # 仕上がりを確認しやすくする。次の押下開始やページ切替でリセットする。
+        # 仕上がりを確認しやすくする。次の押下開始やページ送りで False に戻る。
         self._pending_confirmed: bool = False
 
         self._on_status_change = on_status_change
@@ -138,9 +138,9 @@ class PdfView:
         )
         # pyHanko CLI --field 引数表示用の 1 行ステータス欄。
         # 既定では非表示で、set_show_field(True) のときだけ container 末尾に
-        # 挿入される。読み取り専用の TextInput にして、テキスト選択と
-        # クリップボードへのコピーをネイティブで可能にする。
-        # 等幅フォントにすることでコピー&ペースト時の見やすさを優先。
+        # 挿入される。読み取り専用の TextInput とすることで、ネイティブな
+        # テキスト選択 / クリップボードへのコピーを許可する。
+        # 等幅フォントを用い、コピー&ペースト時の見やすさを優先する。
         self.show_field: bool = False
         self.field_label = toga.TextInput(
             value=FIELD_LABEL_PENDING_TEXT,
@@ -512,7 +512,7 @@ class PdfView:
         """Canvas でのマウスボタン解放イベント。押印位置を確定する。"""
         if self.doc is None or self.selected_hanko is None or not self.interactive:
             return
-        # 位置確定 → 不透明プレビューに切り替えて、仕上がり色で確認できるように。
+        # 位置確定 → 不透明プレビューとし、仕上がり色で確認できるようにする。
         self._pending_confirmed = True
         self._update_pending(x, y)
         self._emit_status()
