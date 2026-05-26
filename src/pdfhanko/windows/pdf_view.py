@@ -89,6 +89,10 @@ class PdfView:
         self.click_canvas: tuple[float, float] | None = None
         self.pending_box_pdf: tuple[int, int, int, int] | None = None
         self.interactive: bool = True
+        # マウスを離して押印位置が確定した直後だけ True にする。
+        # True の間はプレビューを画像本来の濃度 (不透明) で描画し、最終的な
+        # 仕上がりを確認しやすくする。次の押下開始やページ切替でリセットする。
+        self._pending_confirmed: bool = False
 
         self._on_status_change = on_status_change
 
@@ -132,16 +136,20 @@ class PdfView:
             style=Pack(direction=ROW, margin=4, align_items="center"),
             children=[],
         )
-        # pyHanko CLI --field 引数表示用の 1 行ステータスラベル。
+        # pyHanko CLI --field 引数表示用の 1 行ステータス欄。
         # 既定では非表示で、set_show_field(True) のときだけ container 末尾に
-        # 挿入される。等幅フォントにすることでコピー&ペースト時の見やすさを優先。
+        # 挿入される。読み取り専用の TextInput にして、テキスト選択と
+        # クリップボードへのコピーをネイティブで可能にする。
+        # 等幅フォントにすることでコピー&ペースト時の見やすさを優先。
         self.show_field: bool = False
-        self.field_label = toga.Label(
-            FIELD_LABEL_PENDING_TEXT,
+        self.field_label = toga.TextInput(
+            value=FIELD_LABEL_PENDING_TEXT,
+            readonly=True,
             style=Pack(
                 margin=(2, 8),
                 font_family="monospace",
                 font_size=11,
+                flex=1,
             ),
         )
         self._field_label_visible = False
@@ -175,6 +183,7 @@ class PdfView:
         self.page_index = 0
         self.click_canvas = None
         self.pending_box_pdf = None
+        self._pending_confirmed = False
         self._render_current_page()
         self._update_toolbar()
         self._update_nav_buttons()
@@ -213,6 +222,7 @@ class PdfView:
         self.page_image = None
         self.click_canvas = None
         self.pending_box_pdf = None
+        self._pending_confirmed = False
         self.canvas.style.width = 10
         self.canvas.style.height = 10
         self.canvas.root_state.drawing_actions.clear()
@@ -223,6 +233,10 @@ class PdfView:
     def set_selected_hanko(self, hanko: Hanko | None, base_dir: Path) -> None:
         """押印に使うハンコを指定する。
 
+        既に押印位置 (:attr:`click_canvas`) が確定している状態でハンコの
+        サイズが変わった (またはハンコが切り替わった) 場合、新しいサイズで
+        :attr:`pending_box_pdf` を再計算して矩形・``--field`` 表示を追従させる。
+
         Args:
             hanko: 選択中のハンコ。``None`` で解除。
             base_dir: ハンコ画像の解決に使うアプリ専用ディレクトリ。
@@ -231,6 +245,27 @@ class PdfView:
         self.hanko_image_cache.clear()
         if hanko is not None:
             self._load_hanko_preview(hanko, base_dir)
+            if self.click_canvas is not None:
+                # 新しいハンコサイズで矩形を再計算 (内部で _redraw も走る)
+                x, y = self.click_canvas
+                self._update_pending(x, y)
+            else:
+                self._redraw()
+        else:
+            self._redraw()
+        self._emit_status()
+
+    def clear_pending(self) -> None:
+        """確定済みの押印位置とプレビュー描画をクリアする。
+
+        署名保存が完了した直後に呼び出される想定。プレビュー (確定後の不透明
+        印影) を消すことでユーザーに「保存完了 → リセット済み」を視覚的に
+        伝え、同時に :meth:`has_pending` が False になるため、未保存状態と
+        誤検知される問題を回避できる。
+        """
+        self.click_canvas = None
+        self.pending_box_pdf = None
+        self._pending_confirmed = False
         self._redraw()
         self._emit_status()
 
@@ -293,11 +328,11 @@ class PdfView:
         if not self.show_field:
             return
         if self.doc is None or self.pending_box_pdf is None:
-            self.field_label.text = FIELD_LABEL_PENDING_TEXT
+            self.field_label.value = FIELD_LABEL_PENDING_TEXT
             return
         page = self.page_index + 1
         x0, y0, x1, y1 = self.pending_box_pdf
-        self.field_label.text = (
+        self.field_label.value = (
             f'--field "{page}/{x0},{y0},{x1},{y1}/{FIELD_PLACEHOLDER_NAME}"'
         )
 
@@ -326,16 +361,26 @@ class PdfView:
         self.canvas.redraw()
 
     def _draw_hanko_preview(self) -> None:
-        """直近クリック位置にキャッシュ済みの半透明ハンコ画像を描画する。"""
+        """直近クリック位置にキャッシュ済みハンコ画像を描画する。
+
+        :attr:`_pending_confirmed` が True (= 直前にマウスを離して位置確定した
+        状態) のときは不透明版を、それ以外 (ドラッグ追従中) のときは半透明版を
+        使う。
+        """
         if self.click_canvas is None:
             return
         cx, cy = self.click_canvas
-        toga_img = self.hanko_image_cache.get("preview")
+        key = "preview_confirmed" if self._pending_confirmed else "preview"
+        toga_img = self.hanko_image_cache.get(key)
         if toga_img is not None:
             self.canvas.draw_image(toga_img, cx, cy)
 
     def _load_hanko_preview(self, hanko: Hanko, base_dir: Path) -> None:
-        """ハンコ画像をプレビュー用に半透明化・実寸リサイズしてキャッシュする。
+        """ハンコ画像を実寸リサイズして 2 種類キャッシュする。
+
+        - ``preview``: 半透明 (ドラッグ追従中の表示用)
+        - ``preview_confirmed``: 画像本来の濃度 (マウスを離して確定した
+          直後の表示用)
 
         Args:
             hanko: 対象のハンコ。
@@ -343,16 +388,28 @@ class PdfView:
         """
         img_path = hanko.image_path(base_dir)
         pil = Image.open(img_path).convert("RGBA")
-        alpha = pil.split()[3]
+        size_px = max(1, int(round(mm_to_pt(hanko.size_mm) * PT_TO_PX)))
+        pil_full = pil.resize((size_px, size_px), Image.LANCZOS)
+
+        # 確定後 (不透明) 版: そのままの色で描画する。
+        self.hanko_image_cache["preview_confirmed"] = self._pil_to_toga_image(pil_full)
+
+        # ドラッグ中 (半透明) 版: アルファチャンネルに HANKO_PREVIEW_ALPHA を
+        # 乗算して全体を薄くする。
+        alpha = pil_full.split()[3]
         new_alpha = ImageChops.multiply(
             alpha, Image.new("L", alpha.size, HANKO_PREVIEW_ALPHA),
         )
-        pil.putalpha(new_alpha)
-        size_px = max(1, int(round(mm_to_pt(hanko.size_mm) * PT_TO_PX)))
-        pil = pil.resize((size_px, size_px), Image.LANCZOS)
+        pil_translucent = pil_full.copy()
+        pil_translucent.putalpha(new_alpha)
+        self.hanko_image_cache["preview"] = self._pil_to_toga_image(pil_translucent)
+
+    @staticmethod
+    def _pil_to_toga_image(pil: Image.Image) -> toga.Image:
+        """PIL Image を PNG バイト列経由で :class:`toga.Image` に変換する。"""
         buf = io.BytesIO()
         pil.save(buf, format="PNG", dpi=(72, 72))
-        self.hanko_image_cache["preview"] = toga.Image(buf.getvalue())
+        return toga.Image(buf.getvalue())
 
     def _update_toolbar(self) -> None:
         """ツールバーの表示要素を現在の状態に合わせて組み直す。
@@ -397,6 +454,7 @@ class PdfView:
         self.page_index -= 1
         self.click_canvas = None
         self.pending_box_pdf = None
+        self._pending_confirmed = False
         self._render_current_page()
         self._update_nav_buttons()
         self._emit_status()
@@ -408,6 +466,7 @@ class PdfView:
         self.page_index += 1
         self.click_canvas = None
         self.pending_box_pdf = None
+        self._pending_confirmed = False
         self._render_current_page()
         self._update_nav_buttons()
         self._emit_status()
@@ -438,6 +497,8 @@ class PdfView:
         """Canvas でのマウスボタン押下イベント。"""
         if self.doc is None or self.selected_hanko is None or not self.interactive:
             return
+        # 新規押下開始 → ドラッグ追従中扱いで半透明プレビュー。
+        self._pending_confirmed = False
         self._update_pending(x, y)
         self._emit_status()
 
@@ -451,5 +512,7 @@ class PdfView:
         """Canvas でのマウスボタン解放イベント。押印位置を確定する。"""
         if self.doc is None or self.selected_hanko is None or not self.interactive:
             return
+        # 位置確定 → 不透明プレビューに切り替えて、仕上がり色で確認できるように。
+        self._pending_confirmed = True
         self._update_pending(x, y)
         self._emit_status()

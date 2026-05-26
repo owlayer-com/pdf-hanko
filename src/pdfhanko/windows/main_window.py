@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import io
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -149,7 +150,14 @@ class MainWindow:
             app: :class:`pdfhanko.app.PdfHankoApp` インスタンス。
         """
         self.app = app
+        # 直近の署名保存時の (ページ番号, 矩形, ハンコ ID) スナップショット。
+        # クローズ時に現状と比較し、一致していれば「未保存ではない」と判断する。
+        # PDF を開き直すなどで意味を失うタイミングでは None にリセットする。
+        self._last_saved_state: tuple | None = None
         self.window = toga.MainWindow(title=BASE_TITLE, size=(1200, 900))
+        # File > Close (Cmd+W) / Close All を「PDF を閉じる」に振り向ける。
+        # PDF が開いていない時はウィンドウクローズを許可してアプリ終了させる。
+        self.window.on_close = self._on_main_window_close
         self.selected_hanko: Hanko | None = None
         self.pdf_view = PdfView(on_status_change=self._on_pdf_status_change)
         self.pdf_view.on_close_pdf_callback = self._after_pdf_close
@@ -225,9 +233,12 @@ class MainWindow:
             text: PDF ビュー側で生成された人間可読のステータス文字列。
                 現状は副作用のみのため使用しない。
         """
-        self.sign_btn.enabled = (
-            self.pdf_view.has_pending() and self.selected_hanko is not None
-        )
+        enabled = self.pdf_view.has_pending() and self.selected_hanko is not None
+        self.sign_btn.enabled = enabled
+        # File メニュー側の「PDF に署名して保存...」コマンドも同じ条件で同期。
+        sign_command = getattr(self.app, "_sign_command", None)
+        if sign_command is not None:
+            sign_command.enabled = enabled
 
     def _refresh_hanko_list(self) -> None:
         """右ペインのハンコ一覧を再構築する。"""
@@ -329,9 +340,79 @@ class MainWindow:
     def _after_pdf_close(self) -> None:
         """PdfView 側で PDF が閉じられた時のコールバック。
 
-        タイトルバーをベース文字列に戻す。
+        タイトルバーをベース文字列に戻し、保存スナップショットも破棄する。
         """
         self.window.title = BASE_TITLE
+        self._last_saved_state = None
+
+    def _current_stamp_state(self) -> tuple | None:
+        """現在の押印状態 (ページ, 矩形, ハンコ ID) のスナップショットを返す。
+
+        押印確定済み且つハンコ選択済みのときだけタプルを返し、それ以外は
+        ``None`` を返す。:attr:`_last_saved_state` と等価判定で比較する用途。
+        """
+        if not (self.pdf_view.has_pending() and self.selected_hanko is not None):
+            return None
+        return (
+            self.pdf_view.page_index,
+            self.pdf_view.pending_box_pdf,
+            self.selected_hanko.id,
+        )
+
+    def has_unsaved_changes(self) -> bool:
+        """未保存の押印が残っているかを判定する。
+
+        押印確定済みで、かつ直近保存時のスナップショットと不一致のとき True。
+        赤ボタン / Cmd+W (``on_close``) と Cmd+Q (``on_exit``) の両方から
+        共通の判定ロジックとして使われる。
+        """
+        current = self._current_stamp_state()
+        return current is not None and current != self._last_saved_state
+
+    def _on_main_window_close(self, _window: toga.Window, **_kwargs) -> bool:
+        """メインウィンドウのクローズ要求ハンドラ。
+
+        ウィンドウ左上の赤ボタン・File > Close (Cmd+W)・File > Close All は
+        いずれも NSWindow の ``performClose:`` を経由して本ハンドラに到達する。
+        macOS のメニュー API では送信元を区別できないため、すべて同じ
+        「アプリ終了動作」として扱う:
+
+        - PDF 未読込 → そのまま終了
+        - PDF 読込済 & 押印未確定 (署名ボタンがグレーアウト状態) → そのまま終了
+        - PDF 読込済 & 押印確定済 (= 未保存) → 確認ダイアログを別タスクで出し、
+          OK なら ``app.exit()`` でアプリ終了。本ハンドラ自体は False を返して
+          いったんクローズを保留する (確認結果が出るまでウィンドウを生かす)。
+
+        本ハンドラは ``async`` にしない: async にすると Toga がイベントループ
+        経由で戻り値を伝播するため、次のイベント (マウス移動など) が来るまで
+        実際の close が遅延してしまう。
+
+        Returns:
+            True ならウィンドウを閉じる (= 単一ウィンドウ構成なのでアプリ終了)、
+            False ならクローズ保留 (= 確認ダイアログ経由で改めて exit を呼ぶ)。
+        """
+        # 「押印確定済み」かつ「直近保存時のスナップショットと不一致」のときだけ
+        # 未保存とみなす。保存直後はスナップショットと一致するためダイアログを
+        # 出さず即終了できる。
+        if not self.has_unsaved_changes():
+            return True
+        asyncio.create_task(self._confirm_unsaved_then_exit())
+        return False
+
+    async def _confirm_unsaved_then_exit(self) -> None:
+        """未保存の押印がある状態でのクローズ要求に対する確認フロー。
+
+        確認ダイアログで OK が押された場合のみ :meth:`toga.App.exit` を呼んで
+        アプリを終了する。キャンセル時は何もせずウィンドウを維持する。
+        """
+        confirm = await self.window.dialog(
+            toga.ConfirmDialog(
+                "アプリを終了",
+                "押印位置がまだ保存されていません。\n本当に終了してよろしいですか?",
+            )
+        )
+        if confirm:
+            self.app.exit()
 
     def _after_register(self) -> None:
         """ハンコ登録 / 編集が完了した時のコールバック。
@@ -410,6 +491,8 @@ class MainWindow:
                 toga.ErrorDialog("PDF を開けません", str(e))
             )
             return
+        # 別の PDF を開いたら保存スナップショットは無効化する。
+        self._last_saved_state = None
         self.window.title = f"{BASE_TITLE} - {Path(path).name}"
 
     async def _on_sign(self, widget: toga.Button) -> None:
@@ -478,6 +561,11 @@ class MainWindow:
         except Exception as e:
             await self.window.dialog(toga.ErrorDialog("署名に失敗", str(e)))
             return
+
+        # 保存完了 → 現在の (ページ, 矩形, ハンコ ID) をスナップショットとして
+        # 記録する。クローズ時にこのスナップショットと現状を比較して、
+        # 一致していれば未保存ではないと判断する (印影プレビューは残す)。
+        self._last_saved_state = self._current_stamp_state()
 
         await self.window.dialog(
             toga.InfoDialog(

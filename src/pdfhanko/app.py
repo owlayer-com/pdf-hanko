@@ -88,6 +88,10 @@ class PdfHankoApp(toga.App):
     store: HankoStore
     settings: AppSettings
     main_window_obj: MainWindow
+    # Cmd+Q (on_exit) で確認ダイアログ後にユーザーが OK を押した時のフラグ。
+    # True の間は再度 on_exit が呼ばれてもダイアログを出さずに通常終了を許可する
+    # (無限ループ防止)。
+    _quit_confirmed: bool = False
 
     def startup(self) -> None:
         """Toga フレームワークから呼ばれる起動フック。
@@ -128,6 +132,36 @@ class PdfHankoApp(toga.App):
                 group=toga.Group.HELP,
             )
         )
+
+        # 「File」メニューにツールバーボタンと同じ操作を追加する。
+        # ハンドラは MainWindow 側の実装を再利用 (async でも Toga が await する)。
+        # section / order は toga_cocoa の StandardCommand.OPEN / SAVE_AS と
+        # 同じ位置 (section=0/30) に揃えて macOS の作法に合わせる。
+        self.commands.add(
+            toga.Command(
+                self.main_window_obj._on_open_pdf,
+                text="PDF を開く...",
+                shortcut=toga.Key.MOD_1 + "o",
+                tooltip="署名する PDF ファイルを開く",
+                group=toga.Group.FILE,
+                section=0,
+                order=10,
+            )
+        )
+        # 「署名して保存」はツールバー側ボタンと同じく、押印位置・ハンコ選択・
+        # PDF 読込の 3 条件が揃うまで disable しておく。状態同期は
+        # MainWindow._on_pdf_status_change から行う。
+        self._sign_command = toga.Command(
+            self.main_window_obj._on_sign,
+            text="PDF に署名して保存...",
+            shortcut=toga.Key.MOD_1 + "s",
+            tooltip="現在の押印位置で署名済み PDF を保存する",
+            group=toga.Group.FILE,
+            section=30,
+            order=11,
+            enabled=False,
+        )
+        self.commands.add(self._sign_command)
 
         # 「表示」メニューに pyHanko CLI 引数表示のトグルを追加する。
         self._show_field_command = toga.Command(
@@ -200,7 +234,14 @@ class PdfHankoApp(toga.App):
                 logger.exception("メニューラベルの更新に失敗しました")
 
     def on_exit(self) -> bool:
-        """アプリ終了直前のフック。ネイティブリソースを明示的に解放する。
+        """アプリ終了直前のフック。
+
+        Cmd+Q (Quit) などアプリ終了要求時に呼ばれる。未保存の押印が残って
+        いる場合は確認ダイアログを別タスクで起動し、本ハンドラは False を
+        返していったん終了をキャンセルする。OK が押されたら
+        :attr:`_quit_confirmed` を True にして再度 :meth:`exit` を呼ぶ。
+        確認済みフラグが True の場合や未保存が無い場合は、リソースを
+        クリーンアップして True を返し終了を許可する。
 
         Toga / rubicon-objc は Cocoa 側の autorelease pool が drain される際に
         Python コールバック (deallocator) を呼び戻す。Python インタープリタが
@@ -209,14 +250,38 @@ class PdfHankoApp(toga.App):
         明示 close しておく。
 
         Returns:
-            True を返すと終了を許可する。クリーンアップに失敗しても終了を
-            止めないよう、例外は内部で握りつぶす。
+            True を返すと終了を許可、False を返すとキャンセル。
         """
+        if not self._quit_confirmed:
+            try:
+                if self.main_window_obj.has_unsaved_changes():
+                    asyncio.create_task(self._confirm_quit_then_exit())
+                    return False
+            except Exception:
+                logger.exception("未保存状態の判定でエラーが発生したため終了を続行します")
+
         try:
             self.main_window_obj.cleanup()
         except Exception:
             pass
         return True
+
+    async def _confirm_quit_then_exit(self) -> None:
+        """Cmd+Q 押下時の未保存確認フロー。
+
+        OK が押されたら :attr:`_quit_confirmed` を立ててから再度
+        :meth:`exit` を呼ぶ。次の :meth:`on_exit` 呼出はフラグにより
+        ダイアログをスキップし、通常のクリーンアップ → 終了に進む。
+        """
+        confirm = await self.dialog(
+            toga.ConfirmDialog(
+                "アプリを終了",
+                "押印位置がまだ保存されていません。\n本当に終了してよろしいですか?",
+            )
+        )
+        if confirm:
+            self._quit_confirmed = True
+            self.exit()
 
 
 def main() -> PdfHankoApp:

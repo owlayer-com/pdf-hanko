@@ -135,10 +135,15 @@ async def sign_pdf_with_signer(
             y_align=layout.AxisAlignment.ALIGN_MID,
             margins=layout.Margins.uniform(0),
         )
+        # PyHanko の TextStampStyle.background_opacity の既定値は 0.6 (60%) で、
+        # 印影画像をさらに薄く描画してしまう (元の PNG が既にアルファ付き透過
+        # PNG であるため、二重に透明度が掛かる)。1.0 に上書きして画像本来の
+        # 濃度で描画する。
         stamp_style = stamp.TextStampStyle(
             stamp_text="",
             background=images.PdfImage(str(hanko_image)),
             background_layout=bg_layout,
+            background_opacity=1.0,
             border_width=0,
         )
         pdf_signer = signers.PdfSigner(meta, signer=signer, stamp_style=stamp_style)
