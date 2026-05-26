@@ -129,16 +129,21 @@ async def sign_pdf_with_signer(
         # PyHanko の BaseStampStyle.background_layout は既定で 5 pt の
         # uniform margin を持つため、何も指定しないと署名矩形より一回り
         # 小さく印影が描画されてしまう (24 mm 角 → 約 20 mm 角に縮小)。
-        # 矩形いっぱいに描画するためマージンをゼロに上書きする。
+        # 矩形いっぱいに描画するためマージンをゼロに指定する。
         bg_layout = layout.SimpleBoxLayoutRule(
             x_align=layout.AxisAlignment.ALIGN_MID,
             y_align=layout.AxisAlignment.ALIGN_MID,
             margins=layout.Margins.uniform(0),
         )
+        # PyHanko の TextStampStyle.background_opacity の既定値は 0.6 (60%) で、
+        # 印影画像をさらに薄く描画してしまう (元の PNG が既にアルファ付き透過
+        # PNG であるため、二重に透明度が掛かる)。1.0 を指定して画像本来の
+        # 濃度で描画する。
         stamp_style = stamp.TextStampStyle(
             stamp_text="",
             background=images.PdfImage(str(hanko_image)),
             background_layout=bg_layout,
+            background_opacity=1.0,
             border_width=0,
         )
         pdf_signer = signers.PdfSigner(meta, signer=signer, stamp_style=stamp_style)

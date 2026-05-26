@@ -1,0 +1,11 @@
+Metadata-Version: 2.1
+Briefcase-Version: 0.4.2
+Name: pdfhanko
+Formal-Name: PDF Hanko
+App-ID: com.owlayer.pdfhanko
+Version: 0.1.2
+Home-page: https://github.com/owlayer-com/pdf-hanko
+Download-URL: https://github.com/owlayer-com/pdf-hanko
+Author: owlayer-com
+Author-email: noreply@owlayer.com
+Summary: 日本のハンコ文化に特化した PDF 電子署名アプリ

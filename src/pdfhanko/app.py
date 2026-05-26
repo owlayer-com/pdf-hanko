@@ -13,8 +13,35 @@ import toga
 
 from . import __version__
 from .logging_config import LOG_DIR, setup_logging
+from .settings import AppSettings
 from .storage import HankoStore
 from .windows.main_window import MainWindow
+
+SHOW_FIELD_MENU_LABEL = "pyHanko --field 表示"
+"""「表示」メニューに置く --field トグル項目のベースラベル。"""
+
+CHECK_MARK_PREFIX = "✓ "
+"""ON 状態を示すラベル先頭の印。Toga には標準のチェック式メニューが無いため
+ラベル先頭文字を切り替えて代用する。"""
+
+
+def _disable_window_tabbing() -> None:
+    """macOS の View メニューに自動挿入される『Show Tab Bar』を抑制する。
+
+    Cocoa は ``NSWindow.allowsAutomaticWindowTabbing`` が True (既定) のとき
+    View メニューに『Show Tab Bar』『New Tab』等を勝手に挿入する。本アプリは
+    ウィンドウタブを使わないため、メインウィンドウを構築する前に False に
+    切り替えて挿入自体を止める。
+
+    macOS 以外 (rubicon-objc が無い・NSWindow が無い) の環境では何もしない。
+    """
+    try:
+        from rubicon.objc import ObjCClass
+
+        NSWindow = ObjCClass("NSWindow")
+        NSWindow.setAllowsAutomaticWindowTabbing_(False)
+    except Exception:
+        logger.debug("Window tabbing 抑制に失敗 (非 macOS 環境とみなす)", exc_info=True)
 
 logger = logging.getLogger(__name__)
 
@@ -59,31 +86,40 @@ class PdfHankoApp(toga.App):
     """
 
     store: HankoStore
+    settings: AppSettings
     main_window_obj: MainWindow
+    _quit_confirmed: bool = False
+    """終了確認ダイアログで OK を選んだ後に再入する :meth:`on_exit` で、
+    ダイアログを再表示せず通常終了に進ませるためのフラグ (無限ループ防止)。"""
 
     def startup(self) -> None:
         """Toga フレームワークから呼ばれる起動フック。
 
-        ハンコストアを読み込み、メインウィンドウを構築して表示する。
+        ハンコストアと設定を読み込み、メインウィンドウを構築して表示する。
         About コマンドのアクションを差し替え、アプリ固有のダイアログを出す。
         """
+        # MainWindow 生成前に呼ぶ必要がある。Cocoa の NSWindow が tabbing
+        # 有効時に View メニューへ自動挿入する『Show Tab Bar』等の項目を抑制する。
+        _disable_window_tabbing()
+
         self.store = HankoStore()
         self.store.load()
+        self.settings = AppSettings()
+        self.settings.load()
 
         self.main_window_obj = MainWindow(self)
         self.main_window = self.main_window_obj.window
         self.main_window.show()
 
-        # macOS の標準 "About PDF Hanko" メニュー項目を、自前の
-        # ダイアログでオーバーライドする。Toga が自動で挿入する Command の
-        # action だけを差し替える形。
+        # macOS の "About PDF Hanko" メニュー項目は、Toga が自動挿入する
+        # Command の action だけを自前のダイアログハンドラに差し替えて使う。
         try:
             self.commands[toga.Command.ABOUT].action = self._on_about
         except KeyError:
-            # ABOUT コマンドが定義されていないプラットフォームでは無視
+            # ABOUT コマンドが定義されていないプラットフォームでは何もしない
             pass
 
-        # 「ヘルプ」メニューに GitHub の README を開く項目を追加する。
+        # 「ヘルプ」メニュー配下に GitHub の README を開く項目を持つ。
         # macOS では Help メニュー配下に自動配置される。
         self.commands.add(
             toga.Command(
@@ -93,6 +129,45 @@ class PdfHankoApp(toga.App):
                 group=toga.Group.HELP,
             )
         )
+
+        # 「File」メニュー配下に、ツールバーボタンと同じ操作を持たせる。
+        # ハンドラは MainWindow 側の実装を共有する (async でも Toga が await する)。
+        # section / order は toga_cocoa の StandardCommand.OPEN / SAVE_AS と
+        # 同じ位置 (section=0/30) に揃え、macOS の作法に従う。
+        self.commands.add(
+            toga.Command(
+                self.main_window_obj._on_open_pdf,
+                text="PDF を開く...",
+                shortcut=toga.Key.MOD_1 + "o",
+                tooltip="署名する PDF ファイルを開く",
+                group=toga.Group.FILE,
+                section=0,
+                order=10,
+            )
+        )
+        # 「署名して保存」はツールバー側ボタンと同じく、押印位置・ハンコ選択・
+        # PDF 読込の 3 条件が揃うまで非活性とする。状態同期は
+        # MainWindow._on_pdf_status_change から行う。
+        self._sign_command = toga.Command(
+            self.main_window_obj._on_sign,
+            text="PDF に署名して保存...",
+            shortcut=toga.Key.MOD_1 + "s",
+            tooltip="現在の押印位置で署名済み PDF を保存する",
+            group=toga.Group.FILE,
+            section=30,
+            order=11,
+            enabled=False,
+        )
+        self.commands.add(self._sign_command)
+
+        # 「表示」メニュー配下に pyHanko CLI 引数表示のトグルを持つ。
+        self._show_field_command = toga.Command(
+            self._on_toggle_show_field,
+            text=self._show_field_menu_text(self.settings.show_field),
+            tooltip="押印位置を pyHanko CLI の --field 引数形式で表示する",
+            group=toga.Group.VIEW,
+        )
+        self.commands.add(self._show_field_command)
 
     def _on_about(self, widget) -> None:
         """About ダイアログを表示する (同期ハンドラ)。
@@ -111,8 +186,59 @@ class PdfHankoApp(toga.App):
         except Exception:
             logger.exception("ヘルプ URL を開けませんでした: %s", HELP_URL)
 
+    @staticmethod
+    def _show_field_menu_text(enabled: bool) -> str:
+        """--field 表示メニューのラベル文字列を返す。
+
+        Toga の :class:`toga.Command` には標準のチェック表示が無いため、
+        ON 時にはラベル先頭に :data:`CHECK_MARK_PREFIX` を付ける。
+        """
+        return (CHECK_MARK_PREFIX if enabled else "") + SHOW_FIELD_MENU_LABEL
+
+    def _on_toggle_show_field(self, widget) -> None:
+        """「表示」メニューの --field 表示トグル押下時のハンドラ。
+
+        設定値を反転し、永続化したうえで PdfView の表示状態を更新する。
+        """
+        self.settings.show_field = not self.settings.show_field
+        self.settings.save()
+        label = self._show_field_menu_text(self.settings.show_field)
+        self._show_field_command.text = label
+        self._apply_show_field_menu_title(label)
+        self.main_window_obj.pdf_view.set_show_field(self.settings.show_field)
+
+    def _apply_show_field_menu_title(self, label: str) -> None:
+        """ネイティブ NSMenuItem のタイトルを直接書き換える。
+
+        Toga の :class:`toga.Command` は ``text`` を単なる属性として保持しており、
+        書き換えても Cocoa 側の ``NSMenuItem`` の title には反映されない。
+        rubicon-objc 経由で ``setTitle_`` を呼んで動的に同期する。
+
+        Args:
+            label: 新しいメニューラベル。
+        """
+        impl = getattr(self._show_field_command, "_impl", None)
+        natives = getattr(impl, "native", None) if impl is not None else None
+        if not natives:
+            return
+        for native in natives:
+            setter = getattr(native, "setTitle_", None)
+            if setter is None:
+                continue
+            try:
+                setter(label)
+            except Exception:
+                logger.exception("メニューラベルの更新に失敗しました")
+
     def on_exit(self) -> bool:
-        """アプリ終了直前のフック。ネイティブリソースを明示的に解放する。
+        """アプリ終了直前のフック。
+
+        Cmd+Q (Quit) などアプリ終了要求時に呼ばれる。未保存の押印が残って
+        いる場合は確認ダイアログを別タスクで起動し、本ハンドラは False を
+        返していったん終了をキャンセルする。OK が押されたら
+        :attr:`_quit_confirmed` を True にして再度 :meth:`exit` を呼ぶ。
+        確認済みフラグが True の場合や未保存が無い場合は、リソースを
+        クリーンアップして True を返し終了を許可する。
 
         Toga / rubicon-objc は Cocoa 側の autorelease pool が drain される際に
         Python コールバック (deallocator) を呼び戻す。Python インタープリタが
@@ -121,14 +247,38 @@ class PdfHankoApp(toga.App):
         明示 close しておく。
 
         Returns:
-            True を返すと終了を許可する。クリーンアップに失敗しても終了を
-            止めないよう、例外は内部で握りつぶす。
+            True を返すと終了を許可、False を返すとキャンセル。
         """
+        if not self._quit_confirmed:
+            try:
+                if self.main_window_obj.has_unsaved_changes():
+                    asyncio.create_task(self._confirm_quit_then_exit())
+                    return False
+            except Exception:
+                logger.exception("未保存状態の判定でエラーが発生したため終了を続行します")
+
         try:
             self.main_window_obj.cleanup()
         except Exception:
             pass
         return True
+
+    async def _confirm_quit_then_exit(self) -> None:
+        """Cmd+Q 押下時の未保存確認フロー。
+
+        OK が押されたら :attr:`_quit_confirmed` を立ててから再度
+        :meth:`exit` を呼ぶ。次の :meth:`on_exit` 呼出はフラグにより
+        ダイアログをスキップし、通常のクリーンアップ → 終了に進む。
+        """
+        confirm = await self.dialog(
+            toga.ConfirmDialog(
+                "アプリを終了",
+                "押印位置がまだ保存されていません。\n本当に終了してよろしいですか?",
+            )
+        )
+        if confirm:
+            self._quit_confirmed = True
+            self.exit()
 
 
 def main() -> PdfHankoApp:
