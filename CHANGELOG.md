@@ -8,6 +8,37 @@
 
 (次の変更点はここに追記します。)
 
+## [0.2.0] - 2026-05-26
+
+PDF Hanko 単体での pyHanko CLI 連携支援、File メニュー充実、未保存時の
+誤終了防止を中心とした機能強化リリース。
+
+### Added
+
+- pyHanko CLI 用 `--field` 引数文字列を PDF ビュー下部に表示する機能を追加
+  ([src/pdfhanko/windows/pdf_view.py](src/pdfhanko/windows/pdf_view.py))。
+  「表示」メニューからオン/オフを切り替えでき、設定は
+  `~/Library/Application Support/PdfHanko/settings.json` に永続化される
+  ([src/pdfhanko/settings.py](src/pdfhanko/settings.py))。
+  GUI で押印位置を確定したあと、pyHanko CLI / `pyhanko --style-name` で
+  バッチ署名する際の座標貼り付け作業を不要にする。
+- 「File」メニューに「PDF を開く...」(Cmd+O) と「PDF に署名して保存...」
+  (Cmd+S) のコマンドを追加 ([src/pdfhanko/app.py](src/pdfhanko/app.py))。
+  ツールバーボタンとショートカットの両方から同じ操作を実行できる。
+- ウィンドウクローズ要求 (左上の赤ボタン / File > Close / Cmd+W) および
+  アプリ終了要求 (Cmd+Q) に対する未保存確認ダイアログを追加
+  ([src/pdfhanko/windows/main_window.py](src/pdfhanko/windows/main_window.py),
+  [src/pdfhanko/app.py](src/pdfhanko/app.py))。
+  押印位置を確定したまま保存せず終了しようとすると確認ダイアログが出る。
+
+### Changed
+
+- README に macOS スクリーンショット
+  ([docs/screenshots/main_window.png](docs/screenshots/main_window.png))、
+  Releases 一覧へのリンク、PAdES 表記の注意書き、`pyhanko --style-name`
+  との併用フローを追記し、配布・運用周りの情報を整理。
+- NOTICE.md の第三者ライセンス記載を更新。
+
 ## [0.1.2] - 2026-05-23
 
 v0.1.1 リリース後に確認された終了時クラッシュの修正。
@@ -81,7 +112,8 @@ v0.1.0 リリース後に確認されたバグの修正と、UI の小幅な改�
 - 電子署名の法的有効性は使用する証明書・運用方法に依存します。重要な
   契約・法的書類で利用する場合は事前検証を強く推奨します。
 
-[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/owlayer-com/pdf-hanko/releases/tag/v0.1.0
