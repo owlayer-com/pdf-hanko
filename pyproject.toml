@@ -1,6 +1,6 @@
 [project]
 name = "pdfhanko"
-version = "0.2.0"
+version = "0.3.0"
 description = "日本のハンコ文化に特化した PDF 電子署名アプリ"
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,7 @@ dependencies = [
     "pyhanko-cli>=0.4.0",
     "pyhanko[pkcs11]>=0.35.1",
     "pypdfium2>=5.8.0",
+    "pyscard>=2.0.10",
     "toga>=0.5.4",
 ]
 
@@ -48,7 +49,7 @@ package = true
 [tool.briefcase]
 project_name = "PDF Hanko"
 bundle = "com.owlayer"
-version = "0.2.0"
+version = "0.3.0"
 url = "https://github.com/owlayer-com/pdf-hanko"
 author = "owlayer-com"
 author_email = "noreply@owlayer.com"
@@ -68,6 +69,7 @@ requires = [
     "pillow>=12.2.0",
     "pyhanko[pkcs11]>=0.35.1",
     "pypdfium2>=5.8.0",
+    "pyscard>=2.0.10",
 ]
 
 [tool.briefcase.app.pdfhanko.macOS]

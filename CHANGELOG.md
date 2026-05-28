@@ -8,6 +8,56 @@
 
 (次の変更点はここに追記します。)
 
+## [0.3.0] - 2026-05-28
+
+マイナンバーカード（公的個人認証 / JPKI）による署名に対応したリリース。
+PKCS#12 ファイルに加えて、署名用秘密鍵をカード内に保持したまま署名できる
+ようになった。
+
+### Added
+
+- マイナンバーカードの署名用電子証明書による PAdES 署名に対応
+  ([src/pdfhanko/jpki.py](src/pdfhanko/jpki.py),
+  [src/pdfhanko/signing.py](src/pdfhanko/signing.py))。
+  pyscard 経由で PC/SC でカードと通信し、COMPUTE DIGITAL SIGNATURE APDU で
+  RSA PKCS#1 v1.5 署名を行う。署名用秘密鍵はカードから取り出されない。
+- ハンコ登録/編集ダイアログに「証明書種別」（PKCS#12 ファイル / マイナンバー
+  カード）の選択を追加 ([src/pdfhanko/windows/register_window.py](src/pdfhanko/windows/register_window.py))。
+  「カードを確認...」で署名用パスワードを入力して署名用電子証明書を読み出し、
+  シリアル番号と氏名 (Common Name) を登録する。
+- 署名用パスワード入力モーダルを追加
+  ([src/pdfhanko/windows/pin_dialog.py](src/pdfhanko/windows/pin_dialog.py))。
+- 署名用パスワードの**残り試行回数を送信前に確認**し、残回数が少ない場合に
+  警告する仕組みを追加（5 回連続失敗によるカードロックの予防）。
+  登録時のカードと署名時のカードのシリアル番号を照合し、不一致時は署名を中止する
+  ([src/pdfhanko/signing.py](src/pdfhanko/signing.py),
+  [src/pdfhanko/windows/main_window.py](src/pdfhanko/windows/main_window.py))。
+
+### Changed
+
+- ハンコ永続化スキーマ (`Hanko`) に `cert_type` / `jpki_cert_serial` /
+  `jpki_cert_subject_cn` フィールドを追加
+  ([src/pdfhanko/storage.py](src/pdfhanko/storage.py))。既知フィールドのみを
+  読み込む方式に変更し、旧バージョンで作成した設定ファイルからの読み込みには
+  後方互換。
+- ハンコ一覧で証明書種別をアイコン表示（📄 PKCS#12 / 💳 マイナンバーカード）
+  ([src/pdfhanko/windows/main_window.py](src/pdfhanko/windows/main_window.py))。
+- README に動作環境（検証済みカードリーダー: ソニー RC-S300 / PaSoRi）、
+  マイナンバーカードでの署名手順を追記。
+
+### Dependencies
+
+- `pyscard>=2.0.10` を追加（PC/SC 経由の IC カード通信）。
+
+### Notes
+
+- ⚠️ **本バージョンでハンコの登録・編集・削除を行うと、設定ファイル
+  (`~/Library/Application Support/PdfHanko/`) に v0.3.0 で追加した新フィールドが
+  書き込まれ、v0.2 以前にはダウングレードできなくなります。** v0.2 以前は未知
+  フィールドの読み込みに対応していないため、起動時にハンコ一覧の読み込みで
+  エラーになります。ダウングレードが必要な場合は事前に設定ファイルを
+  バックアップしてください。
+
 ## [0.2.0] - 2026-05-26
 
 PDF Hanko 単体での pyHanko CLI 連携支援、File メニュー充実、未保存時の
@@ -112,7 +162,8 @@ v0.1.0 リリース後に確認されたバグの修正と、UI の小幅な改�
 - 電子署名の法的有効性は使用する証明書・運用方法に依存します。重要な
   契約・法的書類で利用する場合は事前検証を強く推奨します。
 
-[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/owlayer-com/pdf-hanko/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.0...v0.1.1

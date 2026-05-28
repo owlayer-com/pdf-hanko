@@ -20,6 +20,7 @@ full text of each license is included below.
 | Toga | 0.5.x | BSD-3-Clause | https://github.com/beeware/toga |
 | Pillow | 12.x | HPND | https://github.com/python-pillow/Pillow |
 | cryptography | — | Apache-2.0 / BSD-3-Clause | https://github.com/pyca/cryptography |
+| pyscard | 2.x | LGPL-2.1-or-later | https://github.com/LudovicRousseau/pyscard |
 
 ---
 
@@ -224,7 +225,46 @@ Copyright (c) Individual contributors. All rights reserved.
 
 ---
 
+## 7. pyscard
+
+Copyright (c) 2001-2026 gemalto, Ludovic Rousseau and contributors
+
+pyscard is free software; you can redistribute it and/or modify it
+under the terms of the **GNU Lesser General Public License version 2.1
+or (at your option) any later version (LGPL-2.1-or-later)** as
+published by the Free Software Foundation.
+
+pyscard is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public
+License for more details.
+
+The full text of the GNU Lesser General Public License, version 2.1, is
+available at: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+### LGPL Compliance Notice / LGPL に基づく頒布上の注意
+
+PDF Hanko incorporates pyscard as a dynamically-loaded Python package
+(including its compiled extension `_scard`). PDF Hanko itself is licensed
+under the MIT License and does **not** modify pyscard's source code.
+
+In accordance with the LGPL, the complete corresponding source code of
+pyscard is publicly available at the project URL above, and the
+dynamically-loaded pyscard component contained in the distributed `.app`
+/ `.dmg` may be replaced by the end user with a modified version of the
+library (e.g. by substituting the `pyscard` package / `_scard*.so` file
+inside the application bundle).
+
+本アプリ (MIT ライセンス) は pyscard を動的にロードされる Python パッケージ
+(コンパイル済み拡張 `_scard` を含む) として同梱しています。pyscard のソース
+コードは改変していません。LGPL に従い、pyscard の対応するソースコード一式は
+上記プロジェクト URL で公開されており、頒布される `.app` / `.dmg` に含まれる
+pyscard コンポーネント (`pyscard` パッケージ / `_scard*.so`) は、利用者が改変版
+ライブラリに差し替えることができます。
+
+---
+
 ## Document Information
 
-Last updated: 2026-05-21
+Last updated: 2026-05-28
 本ファイルはアプリ内「バージョン情報」画面およびリポジトリのルートに配置します。
