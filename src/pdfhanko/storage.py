@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import shutil
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields as dc_fields
 from pathlib import Path
 from typing import Iterable
 
@@ -22,6 +22,12 @@ from .rendering import normalize_image_dpi
 
 APP_DIR_NAME = "PdfHanko"
 """アプリ専用ディレクトリの名前。``~/Library/Application Support/`` 配下に置く。"""
+
+CERT_TYPE_PKCS12 = "pkcs12"
+"""``Hanko.cert_type`` の値: PKCS#12 (.p12/.pfx) ファイルベース。"""
+
+CERT_TYPE_JPKI = "jpki"
+"""``Hanko.cert_type`` の値: マイナンバーカード (JPKI 署名用電子証明書)。"""
 
 
 def app_data_dir() -> Path:
@@ -44,6 +50,14 @@ class Hanko:
         memo: 自由メモ。
         image: 印影画像の相対パス (アプリ専用ディレクトリ基準)。
         cert: 証明書ファイルの相対パス (アプリ専用ディレクトリ基準)。
+            ``cert_type == "jpki"`` の場合は空文字。
+        cert_type: 証明書ソース種別。``"pkcs12"`` (デフォルト) または
+            ``"jpki"`` (マイナンバーカード)。
+        jpki_cert_serial: ``cert_type == "jpki"`` のとき、登録時にカードから
+            読み出した署名用証明書のシリアル番号 (16 進大文字)。署名時に
+            同一カード検証に使う。
+        jpki_cert_subject_cn: ``cert_type == "jpki"`` のとき、登録時の
+            証明書 Subject の Common Name (氏名)。UI 表示用。
     """
 
     id: str
@@ -52,6 +66,9 @@ class Hanko:
     memo: str
     image: str
     cert: str
+    cert_type: str = CERT_TYPE_PKCS12
+    jpki_cert_serial: str | None = None
+    jpki_cert_subject_cn: str | None = None
 
     def image_path(self, base: Path) -> Path:
         """印影画像の絶対パスを返す。
@@ -105,7 +122,13 @@ class HankoStore:
             self.hankos = []
             return
         data = json.loads(self.index_path.read_text(encoding="utf-8"))
-        self.hankos = [Hanko(**item) for item in data]
+        # 未知フィールドを無視して将来の追加に耐えるよう、既知フィールドのみ
+        # を取り出して構築する。欠落フィールドはデータクラスのデフォルト値。
+        known = {f.name for f in dc_fields(Hanko)}
+        self.hankos = [
+            Hanko(**{k: v for k, v in item.items() if k in known})
+            for item in data
+        ]
 
     def save(self) -> None:
         """現在の :attr:`hankos` をインデックスファイルに書き出す。"""
@@ -121,11 +144,18 @@ class HankoStore:
         size_mm: float,
         memo: str,
         image_src: Path,
-        cert_src: Path,
+        cert_src: Path | None = None,
+        *,
+        cert_type: str = CERT_TYPE_PKCS12,
+        jpki_cert_serial: str | None = None,
+        jpki_cert_subject_cn: str | None = None,
     ) -> Hanko:
         """新規ハンコを登録する。
 
-        印影画像は 72 DPI に正規化して保存し、証明書ファイルはそのままコピーする。
+        印影画像は 72 DPI に正規化して保存する。``cert_type == "pkcs12"`` の
+        場合は ``cert_src`` の PKCS#12 ファイルをそのままコピーする。
+        ``cert_type == "jpki"`` の場合は ``cert_src`` 不要で、カードから読み出
+        した証明書シリアル等のメタデータのみ保存する。
 
         Args:
             name: 表示名。
@@ -133,6 +163,11 @@ class HankoStore:
             memo: 自由メモ。
             image_src: コピー元の印影画像ファイル。
             cert_src: コピー元の PKCS#12 証明書ファイル。
+                ``cert_type == "jpki"`` の場合は無視され ``None`` でよい。
+            cert_type: 証明書ソース種別。``"pkcs12"`` または ``"jpki"``。
+            jpki_cert_serial: ``cert_type == "jpki"`` 時の証明書シリアル番号
+                (16 進大文字)。
+            jpki_cert_subject_cn: ``cert_type == "jpki"`` 時の証明書 Subject CN。
 
         Returns:
             登録された :class:`Hanko` インスタンス。
@@ -143,9 +178,22 @@ class HankoStore:
         abs_dir.mkdir(parents=True, exist_ok=True)
 
         image_rel = rel_dir / "image.png"
-        cert_rel = rel_dir / "cert.p12"
         normalize_image_dpi(image_src, self.base_dir / image_rel)
-        shutil.copy2(cert_src, self.base_dir / cert_rel)
+
+        cert_rel_str = ""
+        if cert_type == CERT_TYPE_PKCS12:
+            if cert_src is None:
+                raise ValueError("cert_type='pkcs12' のとき cert_src は必須です")
+            cert_rel = rel_dir / "cert.p12"
+            shutil.copy2(cert_src, self.base_dir / cert_rel)
+            cert_rel_str = str(cert_rel)
+        elif cert_type == CERT_TYPE_JPKI:
+            if jpki_cert_serial is None:
+                raise ValueError(
+                    "cert_type='jpki' のとき jpki_cert_serial は必須です",
+                )
+        else:
+            raise ValueError(f"未知の cert_type: {cert_type!r}")
 
         hanko = Hanko(
             id=hanko_id,
@@ -153,7 +201,10 @@ class HankoStore:
             size_mm=size_mm,
             memo=memo,
             image=str(image_rel),
-            cert=str(cert_rel),
+            cert=cert_rel_str,
+            cert_type=cert_type,
+            jpki_cert_serial=jpki_cert_serial,
+            jpki_cert_subject_cn=jpki_cert_subject_cn,
         )
         self.hankos.append(hanko)
         self.save()
@@ -183,11 +234,15 @@ class HankoStore:
         memo: str | None = None,
         image_src: Path | None = None,
         cert_src: Path | None = None,
+        cert_type: str | None = None,
+        jpki_cert_serial: str | None = None,
+        jpki_cert_subject_cn: str | None = None,
     ) -> Hanko:
         """既存ハンコを部分的に更新する。
 
         ``None`` を渡したフィールドは変更されない。画像 / 証明書を新たに渡すと
-        ディスク上のファイルが置き換えられる。
+        ディスク上のファイルが置き換えられる。``cert_type`` を切り替える場合
+        (PKCS#12 ⇔ JPKI) は旧データを掃除しつつ新規データを書き込む。
 
         Args:
             hanko_id: 更新対象のハンコ ID。
@@ -195,7 +250,11 @@ class HankoStore:
             size_mm: 新しい印影実寸 (mm 角)。
             memo: 新しいメモ。
             image_src: 新しい印影画像ファイル。
-            cert_src: 新しい PKCS#12 証明書ファイル。
+            cert_src: 新しい PKCS#12 証明書ファイル
+                (新 cert_type が ``"pkcs12"`` のときのみ意味を持つ)。
+            cert_type: 新しい証明書ソース種別。
+            jpki_cert_serial: 新 cert_type が ``"jpki"`` のときのシリアル。
+            jpki_cert_subject_cn: 新 cert_type が ``"jpki"`` のとき Subject CN。
 
         Returns:
             更新後の :class:`Hanko` インスタンス。
@@ -215,8 +274,41 @@ class HankoStore:
             target.memo = memo
         if image_src is not None:
             normalize_image_dpi(image_src, self.base_dir / target.image)
-        if cert_src is not None:
-            shutil.copy2(cert_src, self.base_dir / target.cert)
+
+        new_cert_type = cert_type if cert_type is not None else target.cert_type
+        if new_cert_type == CERT_TYPE_PKCS12:
+            if cert_src is not None or cert_type is not None:
+                # 渡された .p12 をハンコ専用ディレクトリにコピーし cert パスを更新する。
+                cert_rel = Path("hankos") / target.id / "cert.p12"
+                abs_cert = self.base_dir / cert_rel
+                abs_cert.parent.mkdir(parents=True, exist_ok=True)
+                if cert_src is None:
+                    raise ValueError(
+                        "cert_type='pkcs12' への切替時は cert_src が必須です",
+                    )
+                shutil.copy2(cert_src, abs_cert)
+                target.cert = str(cert_rel)
+            target.cert_type = CERT_TYPE_PKCS12
+            target.jpki_cert_serial = None
+            target.jpki_cert_subject_cn = None
+        elif new_cert_type == CERT_TYPE_JPKI:
+            if cert_type is not None:
+                # 旧 .p12 をディスクから削除し cert パスを空にする。
+                if target.cert:
+                    old_p12 = self.base_dir / target.cert
+                    old_p12.unlink(missing_ok=True)
+                target.cert = ""
+            if jpki_cert_serial is not None:
+                target.jpki_cert_serial = jpki_cert_serial
+            if jpki_cert_subject_cn is not None:
+                target.jpki_cert_subject_cn = jpki_cert_subject_cn
+            if target.jpki_cert_serial is None:
+                raise ValueError(
+                    "cert_type='jpki' のとき jpki_cert_serial が必要です",
+                )
+            target.cert_type = CERT_TYPE_JPKI
+        else:
+            raise ValueError(f"未知の cert_type: {new_cert_type!r}")
 
         self.save()
         return target

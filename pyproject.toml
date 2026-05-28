@@ -24,6 +24,7 @@ dependencies = [
     "pyhanko-cli>=0.4.0",
     "pyhanko[pkcs11]>=0.35.1",
     "pypdfium2>=5.8.0",
+    "pyscard>=2.0.10",
     "toga>=0.5.4",
 ]
 
@@ -68,6 +69,7 @@ requires = [
     "pillow>=12.2.0",
     "pyhanko[pkcs11]>=0.35.1",
     "pypdfium2>=5.8.0",
+    "pyscard>=2.0.10",
 ]
 
 [tool.briefcase.app.pdfhanko.macOS]

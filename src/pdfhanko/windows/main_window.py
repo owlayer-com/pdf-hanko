@@ -21,9 +21,16 @@ import toga
 from PIL import Image
 from toga.style.pack import COLUMN, ROW, Pack
 
-from ..signing import BadPasswordError, load_pkcs12_signer, sign_pdf_with_signer
-from ..storage import Hanko
+from ..signing import (
+    BadPasswordError,
+    JpkiCertMismatchError,
+    load_jpki_signer,
+    load_pkcs12_signer,
+    sign_pdf_with_signer,
+)
+from ..storage import CERT_TYPE_JPKI, Hanko
 from .password_dialog import prompt_password
+from .pin_dialog import prompt_jpki_pin
 from .pdf_view import PdfView
 from .register_window import RegisterWindow
 
@@ -122,9 +129,11 @@ def _build_clickable_hanko_area(
             22,
             font=toga.Font(family="system", size=13, weight="bold"),
         )
+    # 証明書種別アイコン: PKCS#12 はファイル、マイナンバーカードはカード。
+    cert_icon = "💳" if hanko.cert_type == CERT_TYPE_JPKI else "📄"
     with canvas.fill(color="#666"):
         canvas.write_text(
-            f"{hanko.size_mm:.0f} mm 角",
+            f"{cert_icon} {hanko.size_mm:.0f} mm 角",
             name_x,
             44,
             font=toga.Font(family="system", size=11),
@@ -495,6 +504,143 @@ class MainWindow:
         self._last_saved_state = None
         self.window.title = f"{BASE_TITLE} - {Path(path).name}"
 
+    async def _load_signer_for_selected_hanko(self):
+        """選択中ハンコの cert_type に応じて Signer をロードして返す。
+
+        Returns:
+            ``(signer, close_callable)`` の組。エラーをユーザーに通知済みで
+            続行不可の場合は ``(None, None)`` を返す。``close_callable`` は
+            署名処理後に呼ぶリソース解放関数 (PKCS#12 のときは ``None``)。
+        """
+        hanko = self.selected_hanko
+        assert hanko is not None
+        if hanko.cert_type == CERT_TYPE_JPKI:
+            return await self._load_jpki_signer_for_hanko(hanko)
+        return await self._load_pkcs12_signer_for_hanko(hanko)
+
+    async def _load_pkcs12_signer_for_hanko(self, hanko: Hanko):
+        password = await prompt_password(
+            self.window,
+            f"「{hanko.name}」の証明書パスワードを入力してください。",
+        )
+        if password is None:
+            return None, None
+
+        cert_path = hanko.cert_path(self.app.store.base_dir)
+        try:
+            signer = load_pkcs12_signer(cert_path, password.encode("utf-8"))
+        except BadPasswordError:
+            await self.window.dialog(
+                toga.ErrorDialog(
+                    "パスワード誤り",
+                    "証明書を復号できませんでした。パスワードをご確認ください。",
+                )
+            )
+            return None, None
+        except Exception as e:
+            await self.window.dialog(
+                toga.ErrorDialog("証明書の読み込みに失敗", str(e))
+            )
+            return None, None
+        finally:
+            password = None
+
+        return signer, None
+
+    async def _load_jpki_signer_for_hanko(self, hanko: Hanko):
+        try:
+            from .. import jpki as jpki_mod
+        except ImportError as e:
+            await self.window.dialog(
+                toga.ErrorDialog("pyscard が利用できません", str(e))
+            )
+            return None, None
+
+        readers = jpki_mod.list_readers()
+        if not readers:
+            await self.window.dialog(
+                toga.ErrorDialog(
+                    "カードリーダー未検出",
+                    "カードリーダーを接続してから再実行してください。",
+                )
+            )
+            return None, None
+
+        # PIN を送らずに残回数だけ事前確認する。
+        try:
+            with jpki_mod.JpkiSession() as sess:
+                sess.select_signature_ap()
+                remaining = sess.get_pin_attempts_remaining()
+        except jpki_mod.CardNotFoundError as e:
+            await self.window.dialog(toga.ErrorDialog("カード未検出", str(e)))
+            return None, None
+        except jpki_mod.JpkiError as e:
+            await self.window.dialog(
+                toga.ErrorDialog("カード読み取り失敗", str(e))
+            )
+            return None, None
+
+        if remaining == 0:
+            await self.window.dialog(
+                toga.ErrorDialog(
+                    "PIN ロック",
+                    "署名用 PIN がロックされています。市区町村窓口で解除してください。",
+                )
+            )
+            return None, None
+
+        pin = await prompt_jpki_pin(
+            self.window,
+            f"「{hanko.name}」で署名します。カードを挿入し、署名用パスワードを入力してください。",
+            attempts_remaining=remaining,
+        )
+        if pin is None:
+            return None, None
+
+        try:
+            signer = load_jpki_signer(
+                pin.encode("ascii"),
+                expected_serial=hanko.jpki_cert_serial,
+            )
+        except jpki_mod.JpkiPinError as e:
+            await self.window.dialog(
+                toga.ErrorDialog(
+                    "PIN 誤り",
+                    f"PIN が誤っています (残り {e.attempts_remaining} 回)。",
+                )
+            )
+            return None, None
+        except jpki_mod.JpkiCardLockedError:
+            await self.window.dialog(
+                toga.ErrorDialog(
+                    "PIN ロック",
+                    "署名用 PIN がロックされました。市区町村窓口で解除してください。",
+                )
+            )
+            return None, None
+        except JpkiCertMismatchError as e:
+            await self.window.dialog(
+                toga.ErrorDialog(
+                    "別のカード",
+                    f"登録時のカードと一致しません。\n{e}",
+                )
+            )
+            return None, None
+        except jpki_mod.JpkiError as e:
+            await self.window.dialog(
+                toga.ErrorDialog("カード認証失敗", str(e))
+            )
+            return None, None
+        except Exception as e:
+            await self.window.dialog(
+                toga.ErrorDialog("カードの読み込みに失敗", str(e))
+            )
+            return None, None
+        finally:
+            pin = None
+
+        return signer, signer.close
+
     async def _on_sign(self, widget: toga.Button) -> None:
         """「署名して保存...」ボタン押下時のハンドラ。
 
@@ -523,31 +669,9 @@ class MainWindow:
         if save_path is None:
             return
 
-        password = await prompt_password(
-            self.window,
-            f"「{self.selected_hanko.name}」の証明書パスワードを入力してください。",
-        )
-        if password is None:
+        signer, close_signer = await self._load_signer_for_selected_hanko()
+        if signer is None:
             return
-
-        cert_path = self.selected_hanko.cert_path(self.app.store.base_dir)
-        try:
-            signer = load_pkcs12_signer(cert_path, password.encode("utf-8"))
-        except BadPasswordError:
-            await self.window.dialog(
-                toga.ErrorDialog(
-                    "パスワード誤り",
-                    "証明書を復号できませんでした。パスワードをご確認ください。",
-                )
-            )
-            return
-        except Exception as e:
-            await self.window.dialog(
-                toga.ErrorDialog("証明書の読み込みに失敗", str(e))
-            )
-            return
-        finally:
-            password = None
 
         try:
             await sign_pdf_with_signer(
@@ -561,6 +685,9 @@ class MainWindow:
         except Exception as e:
             await self.window.dialog(toga.ErrorDialog("署名に失敗", str(e)))
             return
+        finally:
+            if close_signer is not None:
+                close_signer()
 
         # 保存完了時点の (ページ, 矩形, ハンコ ID) をスナップショットとして
         # 記録する。クローズ時にこのスナップショットと現状を比較し、
