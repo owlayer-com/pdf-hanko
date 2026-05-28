@@ -9,7 +9,7 @@
 「押印」操作によって、見た目のハンコと PAdES 準拠の電子署名を同時に付与します。
 
 ## 簡易デモ : Quick Demo
-<video src="https://github.com/user-attachments/assets/13377871-00cf-4624-970a-bc46b81bed69" controls></video>
+<video src="https://github.com/user-attachments/assets/7adeead6-4922-4d31-8cd2-063d607c0b00" controls></video>
 
 ## 免責事項 : Disclaimer
 
