@@ -102,6 +102,23 @@ PKCS#12 証明書のパスワードは永続化されず、署名処理中のみ
 「[macOS Gatekeeper の警告について](#releases-からダウンロードして使う場合-macos-gatekeeper-の警告について--macos-gatekeeper-warning-when-using-releases)」
 を参照してください。
 
+### 既存ユーザーの更新手順 : Updating an Existing Installation
+
+自動アップデート機構はありません。新しい `.dmg` をダウンロードして、上書きインストールするだけです。
+
+1. 起動中の `PDF Hanko` を終了する（⌘Q）
+2. 上記「[ダウンロード](#ダウンロード--download)」と同じ手順で最新版の `.dmg` を入手する
+3. 上記「[インストール手順](#インストール手順--installation-steps)」と同じ手順で `PDF Hanko.app` を `Applications` フォルダにドラッグする。
+   「同じ名前の項目が既にあります」と聞かれたら **「置き換える」** を選ぶ（これで上書き＝更新完了）
+4. `Applications` から新しい `PDF Hanko.app` を起動する
+
+> ℹ️ 登録済みの印影画像・証明書などの設定はアプリ本体（`.app`）とは別の場所に
+> 保存されるため、上書きインストールしても引き継がれます。
+>
+> ⚠️ 更新後の初回起動でも Gatekeeper の警告が表示されることがあります。その場合は
+> 下記の「[macOS Gatekeeper の警告について](#releases-からダウンロードして使う場合-macos-gatekeeper-の警告について--macos-gatekeeper-warning-when-using-releases)」
+> を参照してください。
+
 ## 事前準備 : Prerequisites
 
 「ソースから実行する」「`.app` バンドルを自分でビルドする」場合は、いずれも
