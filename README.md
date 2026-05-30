@@ -9,7 +9,7 @@
 「押印」操作によって、見た目のハンコと PAdES 準拠の電子署名を同時に付与します。
 
 ## 簡易デモ : Quick Demo
-![PDF Hanko デモ](docs/videos/pdf_hanko_v0.3.0.gif)
+<img src="docs/videos/pdf_hanko_v0.3.0.gif" alt="PDF Hanko デモ" width="100%">
 
 ## 免責事項 : Disclaimer
 
