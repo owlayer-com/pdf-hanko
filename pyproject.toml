@@ -21,8 +21,11 @@ classifiers = [
 ]
 dependencies = [
     "pillow>=12.2.0",
-    "pyhanko-cli>=0.4.0",
-    "pyhanko[pkcs11]>=0.35.1",
+    "pyhanko-cli>=0.5.0",
+    # 0.36.2 未満は GHSA-pgw3-hgpw-27xc、certvalidator 0.32.1 未満は
+    # GHSA-97fq-v55v-9vg9 の影響を受ける (いずれも検証側の問題)。
+    "pyhanko[pkcs11]>=0.37.0",
+    "pyhanko-certvalidator>=0.32.1",
     "pypdfium2>=5.8.0",
     "pyscard>=2.0.10",
     "toga>=0.5.4",
@@ -70,7 +73,7 @@ sources = ["src/pdfhanko"]
 test_sources = ["tests"]
 requires = [
     "pillow>=12.2.0",
-    "pyhanko[pkcs11]>=0.35.1",
+    "pyhanko[pkcs11]>=0.37.0",
     "pypdfium2>=5.8.0",
     "pyscard>=2.0.10",
 ]

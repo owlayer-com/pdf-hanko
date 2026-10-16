@@ -3,15 +3,25 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 from pathlib import Path
 
 import pytest
+from asn1crypto import algos as asn1_algos
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, utils
+from cryptography.hazmat.primitives.serialization import pkcs12
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko_certvalidator import ValidationContext
 
-from pdfhanko.signing import SameFileError, load_pkcs12_signer, sign_pdf_with_signer
+from pdfhanko.signing import (
+    JpkiSigner,
+    SameFileError,
+    load_pkcs12_signer,
+    sign_pdf_with_signer,
+)
 
 from .conftest import P12_PASSWORD
 
@@ -105,13 +115,16 @@ class TestSigningFailure:
 
 
 class TestSigningSuccess:
-    def _assert_signed(self, path: Path) -> None:
+    def _assert_signed(self, path: Path, signer: signers.SimpleSigner) -> None:
         with open(path, "rb") as f:
             sigs = PdfFileReader(f).embedded_signatures
             assert len(sigs) == 1
-            # 自己署名のため信頼性 (valid) は問わず、改ざんがないことだけ確認する。
-            status = validate_pdf_signature(sigs[0], ValidationContext(allow_fetching=False))
+            # 自己署名証明書を信頼の起点として明示する (OS の信頼リストへの
+            # フォールバックは pyhanko-certvalidator 0.32 で非推奨)。
+            vc = ValidationContext(trust_roots=[signer.signing_cert], allow_fetching=False)
+            status = validate_pdf_signature(sigs[0], vc)
             assert status.intact
+            assert status.valid
 
     def test_signed_output_is_valid(
         self, sample_pdf: Path, hanko_png: Path, signer, tmp_path: Path,
@@ -119,7 +132,7 @@ class TestSigningSuccess:
         original = sample_pdf.read_bytes()
         dst = tmp_path / "out_signed.pdf"
         _sign(sample_pdf, dst, hanko_png, signer)
-        self._assert_signed(dst)
+        self._assert_signed(dst, signer)
         assert sample_pdf.read_bytes() == original
         assert _leftover_temps(tmp_path) == []
 
@@ -129,7 +142,7 @@ class TestSigningSuccess:
         dst = tmp_path / "out_signed.pdf"
         dst.write_bytes(b"old content")
         _sign(sample_pdf, dst, hanko_png, signer)
-        self._assert_signed(dst)
+        self._assert_signed(dst, signer)
 
     def test_symlink_destination(
         self, sample_pdf: Path, hanko_png: Path, signer, tmp_path: Path,
@@ -144,4 +157,62 @@ class TestSigningSuccess:
         _sign(sample_pdf, link, hanko_png, signer)
 
         assert link.is_symlink()
-        self._assert_signed(target)
+        self._assert_signed(target, signer)
+
+
+class _FakeCardSession:
+    """マイナンバーカードの代わりに、PKCS#12 の秘密鍵で署名する偽セッション。
+
+    実カードと同じく DigestInfo (DER) を受け取り、RSA PKCS#1 v1.5 の署名値を返す。
+    """
+
+    def __init__(self, private_key) -> None:
+        self._key = private_key
+        self.closed = False
+
+    def compute_signature(self, digest_info_der: bytes) -> bytes:
+        info = asn1_algos.DigestInfo.load(digest_info_der)
+        assert info["digest_algorithm"]["algorithm"].native == "sha256"
+        return self._key.sign(
+            info["digest"].native, padding.PKCS1v15(), utils.Prehashed(hashes.SHA256()),
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class TestJpkiSigner:
+    """JpkiSigner (pyHanko の Signer を継承した独自実装) の署名経路のテスト。
+
+    pyHanko の更新で Signer の API が変わった場合に検出するため、カードの
+    代わりに偽セッションを使って PDF への署名と検証まで行う。
+    """
+
+    def test_sign_and_validate_without_network(
+        self, sample_pdf: Path, hanko_png: Path, p12_file: Path, tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        def _deny_network(*args, **kwargs):
+            raise AssertionError(f"署名中にネットワーク接続が発生しました: {args!r}")
+
+        key, _, _ = pkcs12.load_key_and_certificates(p12_file.read_bytes(), P12_PASSWORD)
+        cert = load_pkcs12_signer(p12_file, P12_PASSWORD).signing_cert
+        session = _FakeCardSession(key)
+        jpki_signer = JpkiSigner(cert=cert, session=session)
+
+        monkeypatch.setattr(socket.socket, "connect", _deny_network)
+        monkeypatch.setattr(socket, "getaddrinfo", _deny_network)
+        dst = tmp_path / "jpki_signed.pdf"
+        _sign(sample_pdf, dst, hanko_png, jpki_signer)
+        monkeypatch.undo()
+
+        with open(dst, "rb") as f:
+            sigs = PdfFileReader(f).embedded_signatures
+            assert len(sigs) == 1
+            vc = ValidationContext(trust_roots=[cert], allow_fetching=False)
+            status = validate_pdf_signature(sigs[0], vc)
+            assert status.intact
+            assert status.valid
+
+        jpki_signer.close()
+        assert session.closed
