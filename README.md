@@ -390,8 +390,12 @@ uv run python scripts/generate_placeholder_icon.py
 GitHub Releases に添付する `.dmg` を作成する手順：
 
 ```bash
-# 1. (必要なら) pyproject.toml の version を更新
-#    [project] section の version = "X.Y.Z" を新バージョンに書き換える
+# 1. バージョンを X.Y.Z に更新する (develop 上で行い、main へマージしてからビルドする)
+#    - pyproject.toml の version (2 か所: [project] と [tool.briefcase])
+#    - src/pdfhanko.dist-info/METADATA の Version
+#    - CHANGELOG.md の [Unreleased] を [X.Y.Z] - YYYY-MM-DD に移し、末尾の比較リンクを更新
+#    その後 uv.lock の pdfhanko のバージョンを更新する
+uv lock
 
 # 2. 配布用の依存を uv.lock に固定する
 #    依存を変更した場合は uv.lock を更新し、constraints-macos.txt を再生成する。
@@ -402,12 +406,20 @@ uv export --format requirements-txt --no-hashes --no-emit-project --no-dev \
 git diff --exit-code constraints-macos.txt
 
 # 3. Briefcase でビルド + パッケージング (ad-hoc 署名)
+#    .app の Info.plist (CFBundleShortVersionString) は `briefcase create` の
+#    ときにしか生成されず、`update` / `build` では更新されない。バージョンを
+#    変えたリリースでは、必ず create でアプリのひな形を作り直す
+#    (既存の build/pdfhanko/macos/app を上書きしてよいか聞かれるので y と答える)。
+uv run briefcase create macOS
 #    constraints-macos.txt は pyproject.toml の requirement_installer_args で
 #    pip に渡され、同梱パッケージのバージョンが uv.lock に固定される。
 #    アイコン (src/pdfhanko/resources/pdfhanko.icns) を更新した場合は
 #    --update-resources を併用する
 uv run briefcase update macOS --update-requirements --update-resources
 uv run briefcase build macOS                       # .app バンドルをビルド
+#    .app のバージョンが X.Y.Z になっていることを確認する
+/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+    "build/pdfhanko/macos/app/PDF Hanko.app/Contents/Info.plist"
 
 # 4. 同梱パッケージが uv.lock と一致することを確認し、マニフェストを作る
 #    不一致があると終了コード 1 で止まるので、原因を直すまでリリースしない。
