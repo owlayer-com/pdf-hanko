@@ -43,6 +43,9 @@ packages = ["src/pdfhanko"]
 [tool.uv]
 package = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 # ---- Briefcase 設定 ----
 # Mac App Store には公開しないが、自分用 / 配布用 .app バンドル生成のために
 # Briefcase 設定を維持する。bundle は owlayer.com ドメイン逆順形式。
@@ -82,4 +85,5 @@ requires = [
 [dependency-groups]
 dev = [
     "briefcase>=0.4.2",
+    "pytest>=9.1.1",
 ]

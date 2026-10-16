@@ -21,9 +21,11 @@ import toga
 from PIL import Image
 from toga.style.pack import COLUMN, ROW, Pack
 
+from ..fileutil import is_same_file
 from ..signing import (
     BadPasswordError,
     JpkiCertMismatchError,
+    SameFileError,
     load_jpki_signer,
     load_pkcs12_signer,
     sign_pdf_with_signer,
@@ -43,6 +45,13 @@ BASE_TITLE = "PDF Hanko"
 
 THUMBNAIL_PX = 64
 """ハンコ一覧で使うサムネイルの 1 辺ピクセル数。"""
+
+SAME_FILE_TITLE = "保存先が入力 PDF と同じです"
+SAME_FILE_MESSAGE = (
+    "原本を上書きしないよう、入力 PDF と同じファイルには保存できません。\n"
+    "別の保存先を指定してください。"
+)
+"""保存先が入力 PDF と同一ファイルのときに表示するダイアログ文言。"""
 
 NAME_TRUNCATE_AT = 5
 """ハンコ名表示の最大文字数。これを超えた分は ``…`` で省略する。"""
@@ -668,6 +677,12 @@ class MainWindow:
         )
         if save_path is None:
             return
+        # PIN / パスワード入力の前に判定し、カードの PIN 試行回数を無駄にしない。
+        if is_same_file(self.pdf_view.doc_path, Path(save_path)):
+            await self.window.dialog(
+                toga.ErrorDialog(SAME_FILE_TITLE, SAME_FILE_MESSAGE)
+            )
+            return
 
         signer, close_signer = await self._load_signer_for_selected_hanko()
         if signer is None:
@@ -682,6 +697,12 @@ class MainWindow:
                 page_index=self.pdf_view.page_index,
                 box_pdf=self.pdf_view.pending_box_pdf,
             )
+        except SameFileError:
+            # 上の判定後に保存先が差し替えられた場合の備え。
+            await self.window.dialog(
+                toga.ErrorDialog(SAME_FILE_TITLE, SAME_FILE_MESSAGE)
+            )
+            return
         except Exception as e:
             await self.window.dialog(toga.ErrorDialog("署名に失敗", str(e)))
             return

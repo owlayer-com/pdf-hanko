@@ -6,7 +6,22 @@
 
 ## [Unreleased]
 
-(次の変更点はここに追記します。)
+### Security
+
+- 保存先に入力 PDF と同じファイルを指定した場合に、署名処理の途中で入力が
+  切り詰められて原本が壊れる問題を修正
+  ([src/pdfhanko/signing.py](src/pdfhanko/signing.py),
+  [src/pdfhanko/windows/main_window.py](src/pdfhanko/windows/main_window.py))。
+  ハードリンク・シンボリックリンク経由の同一ファイルも検出し、署名用
+  パスワードの入力前にエラーを表示して中止する。
+- 署名済み PDF を同じディレクトリの一時ファイルに書き込み、成功時のみ
+  保存先を置き換えるよう変更
+  ([src/pdfhanko/fileutil.py](src/pdfhanko/fileutil.py))。署名に失敗しても
+  不完全な PDF が残らず、既存の保存先ファイルも変更されない。
+
+### Added
+
+- pytest による自動テストを追加 ([tests/](tests/))。`uv run pytest` で実行する。
 
 ## [0.3.0] - 2026-05-28
 

@@ -19,6 +19,17 @@ from pyhanko.pdf_utils import images, layout
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.sign import fields, signers
 
+from .fileutil import atomic_write, is_same_file
+
+
+class SameFileError(ValueError):
+    """保存先が入力 PDF と同一ファイルであることを示す例外。
+
+    パスが異なっていても、ハードリンク・シンボリックリンク経由で同一の
+    ファイルを指す場合も含む。原本を誤って上書きしないよう、署名処理の
+    開始前に送出する。
+    """
+
 
 class BadPasswordError(Exception):
     """PKCS#12 の復号に失敗したことを示す例外。
@@ -219,9 +230,13 @@ async def sign_pdf_with_signer(
     ``strict=False`` で許容する。一部の PDF 生成ツールがこの形式を出力
     するため、エンドユーザーが遭遇する確率は無視できない。
 
+    出力は同じディレクトリの一時ファイルに書き込み、署名が成功した場合
+    のみ ``dst_pdf`` を置き換える。失敗時に不完全な PDF は残らず、既存の
+    ``dst_pdf`` も変更されない。
+
     Args:
         src_pdf: 入力 PDF。
-        dst_pdf: 出力 PDF。
+        dst_pdf: 出力 PDF。``src_pdf`` と同一ファイルであってはならない。
         hanko_image: 印影 PNG (72 DPI 正規化済みを推奨)。
         signer: ロード済みの PyHanko Signer (PKCS#12 由来の SimpleSigner /
             JPKI 由来の :class:`JpkiSigner` のいずれか)。
@@ -230,7 +245,12 @@ async def sign_pdf_with_signer(
             ``(x0, y0, x1, y1)``。
         field_name: 署名フィールド名。``None`` のときは
             :func:`_generate_field_name` で自動生成する。
+
+    Raises:
+        SameFileError: ``dst_pdf`` が ``src_pdf`` と同一ファイルの場合。
     """
+    if is_same_file(src_pdf, dst_pdf):
+        raise SameFileError(f"保存先が入力 PDF と同じファイルです: {dst_pdf}")
     if field_name is None:
         field_name = _generate_field_name()
     with open(src_pdf, "rb") as inf:
@@ -265,5 +285,5 @@ async def sign_pdf_with_signer(
             border_width=0,
         )
         pdf_signer = signers.PdfSigner(meta, signer=signer, stamp_style=stamp_style)
-        with open(dst_pdf, "wb") as outf:
+        with atomic_write(dst_pdf) as outf:
             await pdf_signer.async_sign_pdf(w, output=outf)
