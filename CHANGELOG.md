@@ -48,6 +48,17 @@
   メモリを確保する前に確認する。上限を超える PDF は開かずにエラーを表示し、
   上限を超えるページは「表示できません」と表示する。
 
+- マイナンバーカードの署名用パスワード（PIN）の検証を強化
+  ([src/pdfhanko/jpki.py](src/pdfhanko/jpki.py),
+  [src/pdfhanko/windows/pin_dialog.py](src/pdfhanko/windows/pin_dialog.py))。
+  途中に空白を含む PIN が入力チェックを通過し、そのままカードに送信されて
+  残り試行回数を消費する問題を修正した。入力画面とカードへの送信直前の両方で、
+  半角英数字のみ・6〜16 文字であることを確認し、合わない場合はカードに送信しない。
+  空白は前後も含めて自動で取り除かず、エラーにする。
+- 診断用コマンド `python -m pdfhanko.jpki` の `--pin` 引数を廃止
+  ([src/pdfhanko/jpki.py](src/pdfhanko/jpki.py))。PIN がシェルの履歴や
+  プロセスの引数に残らないよう、`--verify-pin` 指定時に対話入力させる。
+
 ### Added
 
 - 「PDF Hanko」メニューに「設定…」（⌘,）を追加

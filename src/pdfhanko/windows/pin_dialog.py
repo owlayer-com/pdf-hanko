@@ -15,6 +15,8 @@ import asyncio
 import toga
 from toga.style.pack import COLUMN, ROW, Pack
 
+from ..jpki import InvalidPinFormatError, normalize_signature_pin
+
 # 残り回数がこの値以下になったら警告色で強調する閾値。
 WARN_THRESHOLD = 2
 
@@ -34,6 +36,8 @@ async def prompt_jpki_pin(
 
     Returns:
         入力された PIN 文字列。キャンセルされた場合は ``None``。
+        :func:`pdfhanko.jpki.normalize_signature_pin` の検証を通過した
+        半角英数字のみの文字列であり、``encode("ascii")`` できる。
     """
     loop = asyncio.get_event_loop()
     fut: asyncio.Future[str | None] = loop.create_future()
@@ -47,15 +51,12 @@ async def prompt_jpki_pin(
         modal.close()
 
     def _ok(widget) -> None:
-        v = (input_widget.value or "").strip()
-        if not v:
-            status.text = "PIN を入力してください"
-            return
-        if not (6 <= len(v) <= 16):
-            status.text = "PIN は 6〜16 桁です"
-            return
-        if not v.isascii() or not v.replace(" ", "").isalnum():
-            status.text = "PIN は英数字のみ使用できます"
+        # 空白の除去などの補正はせず、カード送信直前と同じ規則で検証する。
+        v = input_widget.value or ""
+        try:
+            normalize_signature_pin(v)
+        except InvalidPinFormatError as e:
+            status.text = str(e)
             return
         _resolve(v)
 
