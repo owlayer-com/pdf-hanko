@@ -10,9 +10,12 @@ Briefcase の Mac バンドル経由で起動された場合と、``uv run pytho
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+from .fileutil import PRIVATE_FILE_MODE, ensure_private_dir, fix_private_permissions
 
 LOG_DIR = Path.home() / "Library" / "Logs" / "PdfHanko"
 """ログ出力先ディレクトリ。macOS の Console.app からも閲覧可能。"""
@@ -29,6 +32,22 @@ BACKUP_COUNT = 3
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 
+class PrivateRotatingFileHandler(RotatingFileHandler):
+    """ログファイルを ``0600`` (所有者のみ読み書き可) で作成するハンドラ。
+
+    例外文にはファイルパス等が含まれ得るため、ローテーション後に新しく
+    作られるファイルも含めて所有者以外から読めないようにする。
+    """
+
+    def _open(self):
+        fd = os.open(
+            self.baseFilename,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+            PRIVATE_FILE_MODE,
+        )
+        return open(fd, self.mode, encoding=self.encoding, errors=self.errors)
+
+
 def setup_logging(level: int = logging.INFO) -> None:
     """アプリ起動時に 1 回だけ呼ぶロギング初期化処理。
 
@@ -36,17 +55,18 @@ def setup_logging(level: int = logging.INFO) -> None:
         level: アプリ自身のロガーで採用するレベル。デフォルトは INFO。
 
     Side Effects:
-        - ``LOG_DIR`` を作成（存在しない場合）。
-        - ルートロガーに :class:`RotatingFileHandler` を 1 つ追加。
+        - ``LOG_DIR`` を ``0700`` で作成（存在しない場合）し、既存のログ
+          ファイルの権限を所有者のみに狭める。
+        - ルートロガーに :class:`PrivateRotatingFileHandler` を 1 つ追加。
         - ``pdfhanko`` 配下のロガーを ``level`` に設定。
         - PyHanko / pypdfium2 など外部ライブラリの logger は WARNING 以上に
           抑えてログファイルが膨らむのを防ぐ。
         - 未捕捉例外を ``sys.excepthook`` 経由で記録するようにする。
     """
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(LOG_DIR, allow_symlink=True)
     log_path = LOG_DIR / LOG_FILE_NAME
 
-    handler = RotatingFileHandler(
+    handler = PrivateRotatingFileHandler(
         log_path,
         maxBytes=MAX_BYTES,
         backupCount=BACKUP_COUNT,
@@ -70,6 +90,10 @@ def setup_logging(level: int = logging.INFO) -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     sys.excepthook = _log_uncaught_exception
+
+    # 以前のバージョンで作成されたログ (0644 等) の権限を修正する。
+    # ハンドラ設定後に行い、修正した旨をログファイルにも残す。
+    fix_private_permissions(LOG_DIR)
 
 
 def _log_uncaught_exception(exc_type, exc_value, exc_traceback) -> None:

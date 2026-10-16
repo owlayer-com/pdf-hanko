@@ -34,6 +34,8 @@
 - **PDF への押印**: PDF を表示し、ドラッグで押印位置を指定して、1 クリックで見た目のハンコと PAdES 電子署名を同時に付与
 - **複数押印 / 再署名**: すでに署名済みの PDF にも追加で押印可能（甲乙押印、複数ページ押印に対応）
 - **pyHanko CLI 連携**: 「表示」メニューから、確定した押印位置を pyHanko CLI の `--field` 引数形式で表示・コピーできます（CLI でのバッチ署名に流用可）
+- **処理量の上限**: 巨大なページや高圧縮の PDF・画像でアプリが固まったりメモリを使い切ったりしないよう、
+  ファイルサイズ・ページ数・描画サイズに上限を設けています。上限は「設定…」（⌘,）から変更できます
 - **完全ローカル動作**: ネットワーク通信なし。PDF・印影・証明書・パスワードは
   すべて Mac 内のみで処理（マイナンバーカードを使う場合、秘密鍵はカード内に留まり、
   証明書本体は Mac に永続保存されません）
@@ -44,6 +46,11 @@
 証明書・パスワード）は利用者の Mac 内のみで処理され、外部に送信されることは
 ありません。設定ファイルは `~/Library/Application Support/PdfHanko/` 配下に
 保存されます。
+
+登録した印影画像・PKCS#12 証明書・設定ファイル、およびログ
+（`~/Library/Logs/PdfHanko/`）は、所有者のみがアクセスできる権限
+（フォルダ `0700`、ファイル `0600`）で保存されます。以前のバージョンで作成された
+ファイルも、起動時に自動でこの権限に修正されます。
 
 PKCS#12 証明書のパスワードは永続化されず、署名処理中のみメモリに保持されます。
 
@@ -225,6 +232,23 @@ GitHub Releases に添付されている `.dmg` には **Apple Developer ID 署�
 > ℹ️ 登録時に保存したカードのシリアル番号と、署名時に挿入されたカードのシリアル番号が
 > 一致しない場合は、別のカードと判断して署名を中止します。
 
+### 処理量の上限を変更する : Changing Processing Limits
+
+大きすぎる PDF・ページ・印影画像を開こうとすると、上限を超えている旨のエラーが表示されます
+（上限を超えるページは「このページは表示できません」と表示されます）。
+業務上大きなファイルを扱う場合は、「PDF Hanko」メニュー →「設定…」（⌘,）で上限を変更できます。
+
+| 項目 | 既定値 | 推奨上限 |
+| --- | --- | --- |
+| PDF のファイルサイズ | 200 MB | 1,024 MB |
+| PDF のページ数 | 5,000 ページ | 20,000 ページ |
+| 1 ページの描画サイズ | 40 M px | 150 M px |
+| 印影画像のファイルサイズ | 30 MB | 200 MB |
+| 印影画像のピクセル数 | 50 M px | 178 M px |
+
+推奨上限を超える値も保存できますが、メモリ不足でアプリが停止するおそれがあります。
+設定は `~/Library/Application Support/PdfHanko/settings.json` の `limits` に保存されます。
+
 ## pyHanko CLI で同じ押印位置を再現する : Reproduce the Same Stamp Position with pyHanko CLI
 
 GUI で決めた押印位置を pyHanko CLI に渡せば、同じ場所に署名するバッチ処理が
@@ -304,8 +328,11 @@ PKCS#12 のパスフレーズは標準入力か `--passfile` で渡します（�
 src/pdfhanko/
 ├── app.py              # toga.App 本体
 ├── coords.py           # 座標系変換ユーティリティ
+├── fileutil.py         # 安全なファイル書き込み・権限設定
 ├── jpki.py             # マイナンバーカード (JPKI) APDU 通信ラッパ
+├── limits.py           # PDF・画像の処理量の上限
 ├── rendering.py        # pypdfium2 ラッパ
+├── settings.py         # アプリ設定 (settings.json)
 ├── signing.py          # pyHanko ラッパ (PKCS#12 / JPKI Signer)
 ├── storage.py          # ハンコ永続化
 ├── logging_config.py   # ログ出力設定
@@ -317,11 +344,15 @@ src/pdfhanko/
     ├── pdf_view.py         # PDF 表示・押印 UI
     ├── register_window.py  # ハンコ登録/編集ダイアログ
     ├── pin_dialog.py       # 署名用パスワード入力モーダル (JPKI)
-    └── password_dialog.py  # パスワード入力モーダル (PKCS#12)
+    ├── password_dialog.py  # パスワード入力モーダル (PKCS#12)
+    └── settings_window.py  # 設定画面 (処理量の上限)
 
 scripts/
 ├── generate_placeholder_icon.py  # 仮アイコン (朱色の丸印) の PNG を生成
-└── build_icns.py                 # PNG から .icns を生成
+├── build_icns.py                 # PNG から .icns を生成
+└── verify_bundle_deps.py         # 同梱パッケージと uv.lock の照合 (リリース時)
+
+tests/                  # pytest によるテスト (uv run pytest)
 ```
 
 ### アイコンの更新 : Updating the Icon
@@ -362,23 +393,46 @@ GitHub Releases に添付する `.dmg` を作成する手順：
 # 1. (必要なら) pyproject.toml の version を更新
 #    [project] section の version = "X.Y.Z" を新バージョンに書き換える
 
-# 2. Briefcase でビルド + パッケージング (ad-hoc 署名)
+# 2. 配布用の依存を uv.lock に固定する
+#    依存を変更した場合は uv.lock を更新し、constraints-macos.txt を再生成する。
+#    再生成後に差分がなければ (git diff が空なら) uv.lock と一致している。
+uv lock --check
+uv export --format requirements-txt --no-hashes --no-emit-project --no-dev \
+    --group macos-bundle --output-file constraints-macos.txt
+git diff --exit-code constraints-macos.txt
+
+# 3. Briefcase でビルド + パッケージング (ad-hoc 署名)
+#    constraints-macos.txt は pyproject.toml の requirement_installer_args で
+#    pip に渡され、同梱パッケージのバージョンが uv.lock に固定される。
 #    アイコン (src/pdfhanko/resources/pdfhanko.icns) を更新した場合は
 #    --update-resources を併用する
-uv run briefcase update macOS --update-resources   # ソース + アイコンを反映
+uv run briefcase update macOS --update-requirements --update-resources
 uv run briefcase build macOS                       # .app バンドルをビルド
+
+# 4. 同梱パッケージが uv.lock と一致することを確認し、マニフェストを作る
+#    不一致があると終了コード 1 で止まるので、原因を直すまでリリースしない。
+uv run python scripts/verify_bundle_deps.py \
+    --manifest "dist/bundle-manifest-X.Y.Z.json"
+
 uv run briefcase package macOS --adhoc-sign
 
 # 出力: dist/PDF Hanko-X.Y.Z.dmg (約 60 MB)
 
-# 3. git タグ + GitHub Release を作成して .dmg を添付
+# 5. .dmg の SHA-256 を記録する (リリースノートに記載する)
+shasum -a 256 "dist/PDF Hanko-X.Y.Z.dmg"
+
+# 6. git タグ + GitHub Release を作成して .dmg とマニフェストを添付
 git tag vX.Y.Z
 git push origin vX.Y.Z
 gh release create vX.Y.Z \
     --title "vX.Y.Z" \
     --notes "リリースノート本文..." \
-    "dist/PDF Hanko-X.Y.Z.dmg"
+    "dist/PDF Hanko-X.Y.Z.dmg" \
+    "dist/bundle-manifest-X.Y.Z.json"
 ```
+
+`dist/bundle-manifest-X.Y.Z.json` には、`.dmg` に同梱したパッケージの一覧と、
+全ファイルの SHA-256 が記録されます。
 
 `.dmg` には Apple Developer ID 署名を付与していません。利用者は
 [「macOS Gatekeeper の警告について」](#releases-からダウンロードして使う場合-macos-gatekeeper-の警告について--macos-gatekeeper-warning-when-using-releases)
