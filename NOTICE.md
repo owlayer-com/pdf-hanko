@@ -14,7 +14,7 @@ full text of each license is included below.
 
 | Component | Version | License | Project URL |
 |---|---|---|---|
-| PyHanko | 0.35.x | MIT | https://github.com/MatthiasValvekens/pyHanko |
+| PyHanko | 0.37.x | MIT | https://github.com/MatthiasValvekens/pyHanko |
 | Original PyPDF2-derived portions in PyHanko | — | BSD-3-Clause | https://github.com/py-pdf/pypdf |
 | pypdfium2 | 5.x | Apache-2.0 / BSD-3-Clause (PDFium) | https://github.com/pypdfium2-team/pypdfium2 |
 | Toga | 0.5.x | BSD-3-Clause | https://github.com/beeware/toga |
@@ -266,5 +266,5 @@ pyscard コンポーネント (`pyscard` パッケージ / `_scard*.so`) は、�
 
 ## Document Information
 
-Last updated: 2026-05-28
+Last updated: 2026-10-17
 本ファイルはアプリ内「バージョン情報」画面およびリポジトリのルートに配置します。

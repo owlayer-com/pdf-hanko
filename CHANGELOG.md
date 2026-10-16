@@ -13,8 +13,21 @@
 2026-10-16 のセキュリティレビューで挙がった指摘を修正したリリース。保存時の
 原本の破損防止、秘密鍵などの権限の制限、設定ファイルの検証、PDF・画像の処理量の
 上限、マイナンバーカードの PIN 検証の強化、配布物の依存の固定を行った。
+あわせて、セキュリティ勧告が公開されている pyHanko を 0.37.0 に更新した。
 
 ### Security
+
+- pyHanko を 0.35.1 から 0.37.0 に、pyhanko-certvalidator を 0.31.1 から
+  0.32.1 に更新し、次の勧告に対応した ([pyproject.toml](pyproject.toml))。
+  - [GHSA-pgw3-hgpw-27xc](https://github.com/MatthiasValvekens/pyHanko/security/advisories/GHSA-pgw3-hgpw-27xc)
+    (CVE-2026-104097): 署名済み PDF に重複した署名フィールドを追加すると、
+    見た目を変更しても検証で有効と判定される（pyHanko 0.36.1 以下）。
+  - [GHSA-97fq-v55v-9vg9](https://github.com/MatthiasValvekens/pyHanko/security/advisories/GHSA-97fq-v55v-9vg9):
+    証明書の名前制約の照合で大文字・小文字を区別してしまい、除外の制約を
+    すり抜けられる（pyhanko-certvalidator 0.32.0 以下）。
+
+  いずれも署名を**検証する側**の問題で、署名を作成するだけの本アプリは影響を
+  受けないが、配布物に該当バージョンを含めないよう更新した。
 
 - 保存先に入力 PDF と同じファイルを指定した場合に、署名処理の途中で入力が
   切り詰められて原本が壊れる問題を修正
@@ -77,6 +90,17 @@
   SHA-256 をマニフェストとして記録するスクリプトを追加
   ([scripts/verify_bundle_deps.py](scripts/verify_bundle_deps.py))。README の
   リリース手順に組み込んだ。
+
+### Dependencies
+
+- `pyhanko` 0.35.1 → 0.37.0、`pyhanko-certvalidator` 0.31.1 → 0.32.1、
+  `pyhanko-cli` 0.4.0 → 0.5.0。
+- pyHanko 0.37.0 で検証データ取得用の HTTP ライブラリが `requests` から
+  `aiohttp` に変わったため、配布物に `aiohttp`・`aiohappyeyeballs`・`aiosignal`・
+  `attrs`・`frozenlist`・`multidict`・`propcache`・`yarl`・`typing-extensions` が
+  加わり、`requests`・`urllib3`・`charset-normalizer` が外れた。本アプリは
+  検証データの取得やタイムスタンプを使わないため、ネットワーク通信を行わない
+  点は変わらない（署名中に通信が発生しないことをテストで確認している）。
 
 ### Added
 
