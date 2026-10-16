@@ -43,6 +43,9 @@ packages = ["src/pdfhanko"]
 [tool.uv]
 package = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 # ---- Briefcase 設定 ----
 # Mac App Store には公開しないが、自分用 / 配布用 .app バンドル生成のために
 # Briefcase 設定を維持する。bundle は owlayer.com ドメイン逆順形式。
@@ -78,8 +81,20 @@ requires = [
     "toga-cocoa>=0.5.4",
     "std-nslog>=1.0.0",
 ]
+# 配布物に入るパッケージ (推移的な依存を含む) を uv.lock のバージョンに固定する。
+# constraints-macos.txt は uv.lock から生成する (README「リリースビルドの作成」参照)。
+# ユニバーサルビルドでは、もう一方のアーキテクチャは 1 回目のインストール結果と
+# 同じバージョンが `==` で指定されるため、両アーキテクチャとも固定される。
+requirement_installer_args = ["--constraint", "constraints-macos.txt"]
 
 [dependency-groups]
+# Briefcase の macOS ビルドでのみ使うパッケージ。uv.lock で版を固定するために
+# ここに置く。開発環境に入ると標準出力が NSLog に向くため、`uv sync` の既定
+# (dev グループのみ) では入れない。v0.3.0 の配布物と同じ 1.x 系に固定する。
+macos-bundle = [
+    "std-nslog>=1.0.0,<2",
+]
 dev = [
     "briefcase>=0.4.2",
+    "pytest>=9.1.1",
 ]

@@ -24,7 +24,8 @@ from PIL import Image, ImageChops
 from toga.style.pack import CENTER, COLUMN, ROW, Pack
 
 from ..coords import mm_to_pt, pdf_top_to_pdf_bottom_box
-from ..rendering import RenderedPage, render_page
+from ..limits import ResourceLimitError, ResourceLimits
+from ..rendering import RenderedPage, check_pdf_file, check_pdf_pages, render_page
 from ..storage import Hanko
 
 PT_TO_PX = 1.0
@@ -51,6 +52,9 @@ FIELD_PLACEHOLDER_NAME = "[sign-name]"
 FIELD_LABEL_PENDING_TEXT = "--field (押印位置未確定)"
 """押印位置が未確定 / PDF 未読込の時に ``--field`` ラベルへ出すテキスト。"""
 
+UNRENDERABLE_PAGE_SIZE = (480, 160)
+"""描画できなかったページの代わりに表示する領域のサイズ (幅, 高さ)。"""
+
 
 class PdfView:
     """PDF を表示し、押印位置を取得する UI コンポーネント。
@@ -71,13 +75,18 @@ class PdfView:
     def __init__(
         self,
         on_status_change: Callable[[str], None] | None = None,
+        get_limits: Callable[[], ResourceLimits] | None = None,
     ) -> None:
         """ウィジェット階層を構築する。
 
         Args:
             on_status_change: 状態が変わるたびに呼び出されるコールバック。
                 ステータス文字列が引数として渡される。
+            get_limits: 処理量の上限を返す関数。設定画面での変更を次の
+                操作から反映するため、値ではなく関数で受け取る。``None`` の
+                ときは既定値を使う。
         """
+        self._get_limits = get_limits or ResourceLimits
         self.doc: pdfium.PdfDocument | None = None
         self.doc_path: Path | None = None
         self.page_index: int = 0
@@ -169,16 +178,31 @@ class PdfView:
         署名ウィジェット等のフォーム要素を描画するため
         :meth:`PdfDocument.init_forms` も呼ぶ (失敗しても無視する)。
 
+        開く前にファイルサイズを、開いた後にページ数を上限と照合する。
+        上限を超えた場合や開けなかった場合は、表示中の PDF をそのまま残す。
+
         Args:
             pdf_path: 読み込む PDF のパス。
+
+        Raises:
+            pdfhanko.limits.ResourceLimitError: ファイルサイズまたはページ数が
+                上限を超える場合。
         """
-        if self.doc is not None:
-            self.doc.close()
-        self.doc = pdfium.PdfDocument(pdf_path)
+        limits = self._get_limits()
+        check_pdf_file(pdf_path, limits)
+        new_doc = pdfium.PdfDocument(pdf_path)
         try:
-            self.doc.init_forms()
+            check_pdf_pages(len(new_doc), limits)
+        except BaseException:
+            new_doc.close()
+            raise
+        try:
+            new_doc.init_forms()
         except Exception:
             pass
+        if self.doc is not None:
+            self.doc.close()
+        self.doc = new_doc
         self.doc_path = pdf_path
         self.page_index = 0
         self.click_canvas = None
@@ -337,15 +361,41 @@ class PdfView:
         )
 
     def _render_current_page(self) -> None:
-        """現ページをレンダリングして Canvas サイズを更新する。"""
+        """現ページをレンダリングして Canvas サイズを更新する。
+
+        処理量の上限を超えるなどで描画できない場合は、ページの代わりに理由を
+        表示する。このとき :attr:`rendered` は ``None`` となり、押印位置は
+        指定できない (:meth:`_update_pending` が何もしない)。
+        """
         if self.doc is None:
             return
         page = self.doc[self.page_index]
-        self.rendered = render_page(page, scale=PT_TO_PX)
+        try:
+            self.rendered = render_page(page, scale=PT_TO_PX, limits=self._get_limits())
+        except (ResourceLimitError, ValueError) as e:
+            self._show_unrenderable_page(str(e))
+            return
         self.page_image = toga.Image(self.rendered.png_bytes)
         self.canvas.style.width = self.rendered.width_px
         self.canvas.style.height = self.rendered.height_px
         self._redraw()
+
+    def _show_unrenderable_page(self, reason: str) -> None:
+        """描画できなかったページの代わりに、理由を Canvas に表示する。"""
+        self.rendered = None
+        self.page_image = None
+        width, height = UNRENDERABLE_PAGE_SIZE
+        self.canvas.style.width = width
+        self.canvas.style.height = height
+        self.canvas.root_state.drawing_actions.clear()
+        with self.canvas.fill(color=PAGE_BG):
+            self.canvas.rect(0, 0, width, height)
+        with self.canvas.fill(color="#a33"):
+            self.canvas.write_text("このページは表示できません", 16, 32)
+        with self.canvas.fill(color="#444"):
+            for i, line in enumerate(reason.splitlines()):
+                self.canvas.write_text(line, 16, 64 + i * 22)
+        self.canvas.redraw()
 
     def _redraw(self) -> None:
         """Canvas を再描画する (用紙背景 → ページ画像 → 縁 → 押印プレビュー)。"""

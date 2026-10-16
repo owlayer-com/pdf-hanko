@@ -362,23 +362,46 @@ GitHub Releases に添付する `.dmg` を作成する手順：
 # 1. (必要なら) pyproject.toml の version を更新
 #    [project] section の version = "X.Y.Z" を新バージョンに書き換える
 
-# 2. Briefcase でビルド + パッケージング (ad-hoc 署名)
+# 2. 配布用の依存を uv.lock に固定する
+#    依存を変更した場合は uv.lock を更新し、constraints-macos.txt を再生成する。
+#    再生成後に差分がなければ (git diff が空なら) uv.lock と一致している。
+uv lock --check
+uv export --format requirements-txt --no-hashes --no-emit-project --no-dev \
+    --group macos-bundle --output-file constraints-macos.txt
+git diff --exit-code constraints-macos.txt
+
+# 3. Briefcase でビルド + パッケージング (ad-hoc 署名)
+#    constraints-macos.txt は pyproject.toml の requirement_installer_args で
+#    pip に渡され、同梱パッケージのバージョンが uv.lock に固定される。
 #    アイコン (src/pdfhanko/resources/pdfhanko.icns) を更新した場合は
 #    --update-resources を併用する
-uv run briefcase update macOS --update-resources   # ソース + アイコンを反映
+uv run briefcase update macOS --update-requirements --update-resources
 uv run briefcase build macOS                       # .app バンドルをビルド
+
+# 4. 同梱パッケージが uv.lock と一致することを確認し、マニフェストを作る
+#    不一致があると終了コード 1 で止まるので、原因を直すまでリリースしない。
+uv run python scripts/verify_bundle_deps.py \
+    --manifest "dist/bundle-manifest-X.Y.Z.json"
+
 uv run briefcase package macOS --adhoc-sign
 
 # 出力: dist/PDF Hanko-X.Y.Z.dmg (約 60 MB)
 
-# 3. git タグ + GitHub Release を作成して .dmg を添付
+# 5. .dmg の SHA-256 を記録する (リリースノートに記載する)
+shasum -a 256 "dist/PDF Hanko-X.Y.Z.dmg"
+
+# 6. git タグ + GitHub Release を作成して .dmg とマニフェストを添付
 git tag vX.Y.Z
 git push origin vX.Y.Z
 gh release create vX.Y.Z \
     --title "vX.Y.Z" \
     --notes "リリースノート本文..." \
-    "dist/PDF Hanko-X.Y.Z.dmg"
+    "dist/PDF Hanko-X.Y.Z.dmg" \
+    "dist/bundle-manifest-X.Y.Z.json"
 ```
+
+`dist/bundle-manifest-X.Y.Z.json` には、`.dmg` に同梱したパッケージの一覧と、
+全ファイルの SHA-256 が記録されます。
 
 `.dmg` には Apple Developer ID 署名を付与していません。利用者は
 [「macOS Gatekeeper の警告について」](#releases-からダウンロードして使う場合-macos-gatekeeper-の警告について--macos-gatekeeper-warning-when-using-releases)

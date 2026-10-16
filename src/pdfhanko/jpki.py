@@ -22,6 +22,7 @@ PIN 送信前は必ず残回数を確認すること。
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -82,6 +83,69 @@ class JpkiPinError(JpkiError):
             if attempts_remaining > 0
             else "PIN がロックされました"
         )
+
+
+class InvalidPinFormatError(ValueError):
+    """PIN の形式が署名用 PIN の規則 (半角英数字 6〜16 文字) に合わない。
+
+    カードへ送信する前に検出するため、PIN の残り試行回数は消費しない。
+    """
+
+
+# ---- 署名用 PIN の形式 ----
+
+SIGNATURE_PIN_MIN_LEN = 6
+SIGNATURE_PIN_MAX_LEN = 16
+
+_SIGNATURE_PIN_RE = re.compile(
+    rb"[A-Za-z0-9]{%d,%d}" % (SIGNATURE_PIN_MIN_LEN, SIGNATURE_PIN_MAX_LEN),
+)
+"""署名用 PIN の形式。``str.isalnum()`` は全角数字などの Unicode 文字も
+英数字と判定するため、ASCII の文字クラスで明示する。"""
+
+
+def normalize_signature_pin(pin: str | bytes) -> bytes:
+    """署名用 PIN を検証し、カードへ送信する形 (大文字の ASCII バイト列) にする。
+
+    規則は **半角英数字のみ、6〜16 文字**。空白は前後も含めて認めず、
+    自動で取り除くこともしない (入力した PIN と異なる値を送らないため)。
+    英字はカードの仕様に合わせて大文字にそろえる。
+
+    UI での入力チェックと、カードへの送信直前 (:meth:`JpkiSession.verify_signature_pin`)
+    の両方で本関数を使う。
+
+    Args:
+        pin: 入力された PIN。
+
+    Returns:
+        大文字に正規化した ASCII バイト列。
+
+    Raises:
+        InvalidPinFormatError: 規則に合わない場合。メッセージはそのまま
+            ユーザーに表示できる。
+    """
+    if isinstance(pin, str):
+        if not pin:
+            raise InvalidPinFormatError("PIN を入力してください")
+        if any(c.isspace() for c in pin):
+            raise InvalidPinFormatError("PIN に空白は使用できません")
+        try:
+            raw = pin.encode("ascii")
+        except UnicodeEncodeError:
+            raise InvalidPinFormatError("PIN は半角英数字のみ使用できます") from None
+    else:
+        raw = bytes(pin)
+        if not raw:
+            raise InvalidPinFormatError("PIN を入力してください")
+        if any(chr(b).isspace() for b in raw):
+            raise InvalidPinFormatError("PIN に空白は使用できません")
+    if re.fullmatch(rb"[A-Za-z0-9]*", raw) is None:
+        raise InvalidPinFormatError("PIN は半角英数字のみ使用できます")
+    if _SIGNATURE_PIN_RE.fullmatch(raw) is None:
+        raise InvalidPinFormatError(
+            f"PIN は {SIGNATURE_PIN_MIN_LEN}〜{SIGNATURE_PIN_MAX_LEN} 桁です",
+        )
+    return raw.upper()
 
 
 @dataclass(frozen=True)
@@ -269,8 +333,10 @@ class JpkiSession(AbstractContextManager):
         """署名用 PIN を認証する。
 
         マイナンバーカードの署名用 PIN は **6〜16 桁の英数字**で、英字は
-        大文字として扱われる。本メソッドは PIN を**大文字に正規化してから
-        送信**する（呼び出し側で正規化済みの場合も冪等）。
+        大文字として扱われる。本メソッドは :func:`normalize_signature_pin` で
+        形式を検証し、**大文字に正規化してから送信**する（呼び出し側で正規化
+        済みの場合も冪等）。形式が不正な場合はカードに何も送らないため、
+        残り試行回数を消費しない。
 
         APDU: ``00 20 00 80 Lc <PIN>``
 
@@ -278,12 +344,13 @@ class JpkiSession(AbstractContextManager):
             pin: PIN バイト列（ASCII）。
 
         Raises:
+            InvalidPinFormatError: PIN の形式が不正 (カードには送信しない)。
             JpkiPinError: PIN 誤り。残回数を保持。
             JpkiCardLockedError: PIN ロック済み。
             JpkiError: その他のエラー。
         """
+        normalized = normalize_signature_pin(pin)
         self._select_ef(EF_SIGN_PIN)
-        normalized = pin.upper()
         apdu = bytes([0x00, 0x20, 0x00, 0x80, len(normalized)]) + normalized
         res = self._transmit(apdu)
         if res.sw == SW_SUCCESS:
@@ -379,13 +446,16 @@ def _parse_ber_remaining_length(head: bytes) -> int:
 # ---- CLI probe ----
 
 
-def _probe(verify_pin: bool = False, pin: str | None = None) -> None:
+def _probe(verify_pin: bool = False) -> None:
     """デバッグ用 CLI エントリ。
 
     ``python -m pdfhanko.jpki`` で実行できる。デフォルトでは PIN を送らず、
     リーダー検出と AP 選択、PIN 残回数取得のみを行う（PIN を消費しない安全な
-    確認モード）。``--verify-pin PIN`` を渡すと VERIFY と証明書読み出しまで
-    行う。
+    確認モード）。``--verify-pin`` を渡すと PIN を対話入力させ、VERIFY と
+    証明書読み出しまで行う。
+
+    PIN はシェル履歴やプロセス引数 (``ps`` で見える) に残らないよう、
+    コマンドライン引数では受け取らず :func:`getpass.getpass` で入力させる。
     """
     print("=== JPKI Probe ===")
     rs = list_readers()
@@ -409,13 +479,20 @@ def _probe(verify_pin: bool = False, pin: str | None = None) -> None:
         if not verify_pin:
             print("(PIN 送信は --verify-pin で明示指定が必要)")
             return
-        if pin is None:
-            print("ERROR: --verify-pin 指定時は PIN が必要")
-            return
         if remaining <= 2:
             print(f"WARNING: 残 {remaining} 回。続行しますか？ Ctrl+C で中断")
             input("Enter で続行: ")
-        sess.verify_signature_pin(pin.encode("ascii"))
+        import getpass
+
+        pin = getpass.getpass("署名用 PIN（6〜16 桁英数字。入力は表示されません）: ")
+        try:
+            pin_bytes = normalize_signature_pin(pin)
+        except InvalidPinFormatError as e:
+            print(f"ERROR: {e}（カードには送信していません）")
+            return
+        finally:
+            pin = None
+        sess.verify_signature_pin(pin_bytes)
         print("VERIFY PIN: OK")
         cert_der = sess.read_signature_certificate()
         print(f"証明書 DER 読み出し: {len(cert_der)} bytes")
@@ -429,8 +506,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--verify-pin",
         action="store_true",
-        help="PIN を実際に送信して認証＋証明書読み出しまで行う（PIN 試行回数を消費する）",
+        help=(
+            "PIN を対話入力して認証＋証明書読み出しまで行う（PIN 試行回数を消費する）。"
+            "PIN はコマンドライン引数では受け付けない"
+        ),
     )
-    parser.add_argument("--pin", type=str, default=None, help="署名用 PIN（6〜16 桁英数字）")
     args = parser.parse_args()
-    _probe(verify_pin=args.verify_pin, pin=args.pin)
+    _probe(verify_pin=args.verify_pin)

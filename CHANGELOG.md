@@ -6,7 +6,105 @@
 
 ## [Unreleased]
 
-(次の変更点はここに追記します。)
+### Security
+
+- 保存先に入力 PDF と同じファイルを指定した場合に、署名処理の途中で入力が
+  切り詰められて原本が壊れる問題を修正
+  ([src/pdfhanko/signing.py](src/pdfhanko/signing.py),
+  [src/pdfhanko/windows/main_window.py](src/pdfhanko/windows/main_window.py))。
+  ハードリンク・シンボリックリンク経由の同一ファイルも検出し、署名用
+  パスワードの入力前にエラーを表示して中止する。
+- 署名済み PDF を同じディレクトリの一時ファイルに書き込み、成功時のみ
+  保存先を置き換えるよう変更
+  ([src/pdfhanko/fileutil.py](src/pdfhanko/fileutil.py))。署名に失敗しても
+  不完全な PDF が残らず、既存の保存先ファイルも変更されない。
+- アプリ専用データ（`~/Library/Application Support/PdfHanko/`）とログ
+  （`~/Library/Logs/PdfHanko/`）の権限を、所有者のみアクセスできる設定
+  （ディレクトリ `0700`、ファイル `0600`）に変更
+  ([src/pdfhanko/fileutil.py](src/pdfhanko/fileutil.py),
+  [src/pdfhanko/storage.py](src/pdfhanko/storage.py),
+  [src/pdfhanko/settings.py](src/pdfhanko/settings.py),
+  [src/pdfhanko/logging_config.py](src/pdfhanko/logging_config.py))。
+  PKCS#12 の取り込みは内容だけを複製し、コピー元の権限・拡張属性
+  （quarantine 等）を引き継がない。以前のバージョンで作成されたファイルは、
+  起動時に自動で権限を修正する。
+- ハンコ一覧（`hankos.json`）の内容を検証するよう変更
+  ([src/pdfhanko/storage.py](src/pdfhanko/storage.py))。ID の形式・各項目の型・
+  ファイルパスが想定と異なるエントリや、保存先がシンボリックリンクになっている
+  エントリは読み込まない。印影画像と証明書の場所は、`hankos.json` に保存された
+  パスではなく ID から組み立てるため、設定を書き換えてもアプリ専用フォルダの
+  外にあるファイルの読み取り・上書き・削除には使えない。
+- `hankos.json` が壊れている場合でも起動できるよう変更。問題があった場合は
+  起動時にダイアログで知らせ、元のファイルは次の保存の前に
+  `hankos.json.<日時>.bak` として退避する。
+- ハンコ一覧（`hankos.json`）と設定（`settings.json`）、印影画像の保存を、
+  一時ファイル経由の置き換えに変更し、書き込み途中の失敗でファイルが
+  壊れないようにした。
+
+- 巨大なページや高圧縮の PDF・画像によるメモリ枯渇・応答停止を防ぐため、
+  処理量に上限を設けた ([src/pdfhanko/limits.py](src/pdfhanko/limits.py),
+  [src/pdfhanko/rendering.py](src/pdfhanko/rendering.py))。PDF のファイル
+  サイズ・ページ数・1 ページの描画サイズ、印影画像のファイルサイズ・ピクセル数を、
+  メモリを確保する前に確認する。上限を超える PDF は開かずにエラーを表示し、
+  上限を超えるページは「表示できません」と表示する。
+
+- マイナンバーカードの署名用パスワード（PIN）の検証を強化
+  ([src/pdfhanko/jpki.py](src/pdfhanko/jpki.py),
+  [src/pdfhanko/windows/pin_dialog.py](src/pdfhanko/windows/pin_dialog.py))。
+  途中に空白を含む PIN が入力チェックを通過し、そのままカードに送信されて
+  残り試行回数を消費する問題を修正した。入力画面とカードへの送信直前の両方で、
+  半角英数字のみ・6〜16 文字であることを確認し、合わない場合はカードに送信しない。
+  空白は前後も含めて自動で取り除かず、エラーにする。
+- 診断用コマンド `python -m pdfhanko.jpki` の `--pin` 引数を廃止
+  ([src/pdfhanko/jpki.py](src/pdfhanko/jpki.py))。PIN がシェルの履歴や
+  プロセスの引数に残らないよう、`--verify-pin` 指定時に対話入力させる。
+
+- 配布用 `.app` に同梱するパッケージのバージョンを `uv.lock` に固定
+  ([pyproject.toml](pyproject.toml), [constraints-macos.txt](constraints-macos.txt))。
+  これまでは Briefcase の依存指定が `>=` で推移的な依存も固定していなかった
+  ため、ビルド時点の最新版が入っていた（v0.3.0 の成果物では `idna`・`click`・
+  `platformdirs`・`uritools` が lock と異なっていた）。`uv.lock` から生成した
+  制約ファイルを Briefcase の `requirement_installer_args` で pip に渡す。
+- リリース前に同梱パッケージを `uv.lock` と照合し、パッケージ一覧と全ファイルの
+  SHA-256 をマニフェストとして記録するスクリプトを追加
+  ([scripts/verify_bundle_deps.py](scripts/verify_bundle_deps.py))。README の
+  リリース手順に組み込んだ。
+
+### Added
+
+- 「PDF Hanko」メニューに「設定…」（⌘,）を追加
+  ([src/pdfhanko/windows/settings_window.py](src/pdfhanko/windows/settings_window.py))。
+  処理量の上限を変更できる。各項目に既定値と推奨上限を表示し、推奨上限を
+  超える値は警告と確認のうえで保存できる。設定は `settings.json` の `limits`
+  に保存される。
+- pytest による自動テストを追加 ([tests/](tests/))。`uv run pytest` で実行する。
+
+### Fixed
+
+- 「pyHanko --field 表示」の切り替え時に、`settings.json` のほかの項目が
+  失われないよう、すべての項目を書き出すよう変更
+  ([src/pdfhanko/settings.py](src/pdfhanko/settings.py))。
+- PDF を開くのに失敗したとき、それまで表示していた PDF の状態が壊れる問題を修正
+  ([src/pdfhanko/windows/pdf_view.py](src/pdfhanko/windows/pdf_view.py))。
+  新しい PDF の確認が済むまで、表示中の PDF を閉じないようにした。
+
+### Notes
+
+- 初回起動時に、登録済みのハンコ・設定・ログの権限が自動で修正されます
+  （ディレクトリ `0700`、ファイル `0600`）。操作は不要です。修正した件数は
+  ログ（`~/Library/Logs/PdfHanko/pdfhanko.log`）に記録されます。
+  権限を変更しても本人は読み書きできるため、v0.3.0 に戻してもそのまま使えます。
+- `~/Library/Application Support/PdfHanko/` やログフォルダを別の場所への
+  シンボリックリンクにしている場合は、ログに警告を記録したうえで、リンク先を
+  そのまま使用します。リンク先のフォルダとその中のファイルの権限も、上記と
+  同じく修正されます。なお、`PdfHanko/` の内側（`hankos/` 以下）を
+  シンボリックリンクにすることはできません。
+- 次のものはアプリから修正できません。必要に応じてご自身で対応してください。
+  - Time Machine などのバックアップに残っている、以前のバージョンのデータ
+    （元の権限のまま保存されています）。
+  - ハンコの登録に使った元の `.p12` / `.pfx` ファイル。登録後は安全な場所に
+    保管するか、不要であれば削除してください。
+  - 既存ファイルに設定されている ACL（アクセス制御リスト）と拡張属性。
 
 ## [0.3.0] - 2026-05-28
 

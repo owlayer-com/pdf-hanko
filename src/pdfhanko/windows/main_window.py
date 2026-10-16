@@ -21,9 +21,12 @@ import toga
 from PIL import Image
 from toga.style.pack import COLUMN, ROW, Pack
 
+from ..fileutil import is_same_file
+from ..rendering import check_pdf_file
 from ..signing import (
     BadPasswordError,
     JpkiCertMismatchError,
+    SameFileError,
     load_jpki_signer,
     load_pkcs12_signer,
     sign_pdf_with_signer,
@@ -43,6 +46,13 @@ BASE_TITLE = "PDF Hanko"
 
 THUMBNAIL_PX = 64
 """ハンコ一覧で使うサムネイルの 1 辺ピクセル数。"""
+
+SAME_FILE_TITLE = "保存先が入力 PDF と同じです"
+SAME_FILE_MESSAGE = (
+    "原本を上書きしないよう、入力 PDF と同じファイルには保存できません。\n"
+    "別の保存先を指定してください。"
+)
+"""保存先が入力 PDF と同一ファイルのときに表示するダイアログ文言。"""
 
 NAME_TRUNCATE_AT = 5
 """ハンコ名表示の最大文字数。これを超えた分は ``…`` で省略する。"""
@@ -168,7 +178,10 @@ class MainWindow:
         # 到達する。未保存があれば確認ダイアログを挟んだうえでアプリを終了させる。
         self.window.on_close = self._on_main_window_close
         self.selected_hanko: Hanko | None = None
-        self.pdf_view = PdfView(on_status_change=self._on_pdf_status_change)
+        self.pdf_view = PdfView(
+            on_status_change=self._on_pdf_status_change,
+            get_limits=lambda: self.app.settings.limits,
+        )
         self.pdf_view.on_close_pdf_callback = self._after_pdf_close
         self.pdf_view.set_show_field(self.app.settings.show_field)
 
@@ -526,8 +539,8 @@ class MainWindow:
         if password is None:
             return None, None
 
-        cert_path = hanko.cert_path(self.app.store.base_dir)
         try:
+            cert_path = hanko.cert_path(self.app.store.base_dir)
             signer = load_pkcs12_signer(cert_path, password.encode("utf-8"))
         except BadPasswordError:
             await self.window.dialog(
@@ -668,6 +681,19 @@ class MainWindow:
         )
         if save_path is None:
             return
+        # PIN / パスワード入力の前に判定し、カードの PIN 試行回数を無駄にしない。
+        if is_same_file(self.pdf_view.doc_path, Path(save_path)):
+            await self.window.dialog(
+                toga.ErrorDialog(SAME_FILE_TITLE, SAME_FILE_MESSAGE)
+            )
+            return
+        # pyHanko は署名時にファイル全体を扱うため、開いた後に差し替えられて
+        # いないかも含めてサイズを再確認する。
+        try:
+            check_pdf_file(self.pdf_view.doc_path, self.app.settings.limits)
+        except Exception as e:
+            await self.window.dialog(toga.ErrorDialog("署名できません", str(e)))
+            return
 
         signer, close_signer = await self._load_signer_for_selected_hanko()
         if signer is None:
@@ -682,6 +708,12 @@ class MainWindow:
                 page_index=self.pdf_view.page_index,
                 box_pdf=self.pdf_view.pending_box_pdf,
             )
+        except SameFileError:
+            # 上の判定後に保存先が差し替えられた場合の備え。
+            await self.window.dialog(
+                toga.ErrorDialog(SAME_FILE_TITLE, SAME_FILE_MESSAGE)
+            )
+            return
         except Exception as e:
             await self.window.dialog(toga.ErrorDialog("署名に失敗", str(e)))
             return
