@@ -111,6 +111,10 @@ class PdfHankoApp(toga.App):
         self.main_window = self.main_window_obj.window
         self.main_window.show()
 
+        if self.store.load_problems:
+            # startup は同期フックのため、ダイアログはイベントループに予約する。
+            self.loop.create_task(self._notify_load_problems())
+
         # macOS の "About PDF Hanko" メニュー項目は、Toga が自動挿入する
         # Command の action だけを自前のダイアログハンドラに差し替えて使う。
         try:
@@ -177,6 +181,17 @@ class PdfHankoApp(toga.App):
         """
         asyncio.create_task(
             self.dialog(toga.InfoDialog("PDF Hanko について", _build_about_message()))
+        )
+
+    async def _notify_load_problems(self) -> None:
+        """ハンコ一覧の読み込みで見つかった問題を起動直後に通知する。"""
+        message = "\n".join(self.store.load_problems) + (
+            "\n\n元のファイルは、次にハンコを登録・変更・削除したときに "
+            "hankos.json.<日時>.bak として同じフォルダに退避されます。\n"
+            f"詳細はログ ({LOG_DIR}) を確認してください。"
+        )
+        await self.main_window.dialog(
+            toga.InfoDialog("ハンコ一覧の読み込みに問題があります", message)
         )
 
     def _on_open_help(self, widget) -> None:

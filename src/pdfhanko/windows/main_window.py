@@ -535,8 +535,8 @@ class MainWindow:
         if password is None:
             return None, None
 
-        cert_path = hanko.cert_path(self.app.store.base_dir)
         try:
+            cert_path = hanko.cert_path(self.app.store.base_dir)
             signer = load_pkcs12_signer(cert_path, password.encode("utf-8"))
         except BadPasswordError:
             await self.window.dialog(
