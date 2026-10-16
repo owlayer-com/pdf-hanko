@@ -13,6 +13,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .fileutil import PRIVATE_FILE_MODE, atomic_write, ensure_private_dir
 from .storage import app_data_dir
 
 SETTINGS_FILE_NAME = "settings.json"
@@ -45,7 +46,7 @@ class AppSettings:
         変更せず既定値を維持する。未知のキーは無視し、欠落しているキーは
         既定値が使われる。
         """
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.base_dir, allow_symlink=True)
         if not self.path.exists():
             return
         try:
@@ -58,9 +59,7 @@ class AppSettings:
 
     def save(self) -> None:
         """現在の設定値を JSON で書き出す。"""
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.base_dir, allow_symlink=True)
         payload = {"show_field": self.show_field}
-        self.path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        with atomic_write(self.path, mode=PRIVATE_FILE_MODE) as f:
+            f.write(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))

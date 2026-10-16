@@ -8,6 +8,10 @@
         hankos/<uuid>/cert.p12            PKCS#12 証明書ファイル
 
 PKCS#12 のパスワードは保存しない (署名時に毎回入力させる)。
+
+ディレクトリは ``0700``、ファイルは ``0600`` (所有者のみアクセス可) で
+作成する。以前のバージョンで作成された広い権限のファイルは、
+:meth:`HankoStore.load` の呼び出し時に修正する。
 """
 from __future__ import annotations
 
@@ -18,6 +22,13 @@ from dataclasses import asdict, dataclass, field, fields as dc_fields
 from pathlib import Path
 from typing import Iterable
 
+from .fileutil import (
+    PRIVATE_FILE_MODE,
+    atomic_write,
+    copy_private_file,
+    ensure_private_dir,
+    fix_private_permissions,
+)
 from .rendering import normalize_image_dpi
 
 APP_DIR_NAME = "PdfHanko"
@@ -116,8 +127,13 @@ class HankoStore:
 
         ``base_dir`` が存在しない場合は作成する。インデックスが
         存在しない場合は空リストになる。
+
+        以前のバージョンで作成されたファイルの権限 (``0755`` / ``0644`` 等) を
+        毎回確認し、所有者のみに狭める。バックアップからの復元などで権限が
+        広がった場合も次回起動時に修正される。
         """
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.base_dir, allow_symlink=True)
+        fix_private_permissions(self.base_dir)
         if not self.index_path.exists():
             self.hankos = []
             return
@@ -132,11 +148,25 @@ class HankoStore:
 
     def save(self) -> None:
         """現在の :attr:`hankos` をインデックスファイルに書き出す。"""
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        self.index_path.write_text(
-            json.dumps([asdict(h) for h in self.hankos], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        ensure_private_dir(self.base_dir, allow_symlink=True)
+        payload = json.dumps([asdict(h) for h in self.hankos], ensure_ascii=False, indent=2)
+        with atomic_write(self.index_path, mode=PRIVATE_FILE_MODE) as f:
+            f.write(payload.encode("utf-8"))
+
+    def _ensure_hanko_dir(self, hanko_id: str) -> Path:
+        """ハンコ専用ディレクトリ ``hankos/<id>/`` を ``0700`` で用意する。
+
+        Args:
+            hanko_id: ハンコ ID。
+
+        Returns:
+            ハンコ専用ディレクトリの絶対パス。
+        """
+        ensure_private_dir(self.base_dir, allow_symlink=True)
+        ensure_private_dir(self.base_dir / "hankos")
+        abs_dir = self.base_dir / "hankos" / hanko_id
+        ensure_private_dir(abs_dir)
+        return abs_dir
 
     def add(
         self,
@@ -174,18 +204,17 @@ class HankoStore:
         """
         hanko_id = uuid.uuid4().hex
         rel_dir = Path("hankos") / hanko_id
-        abs_dir = self.base_dir / rel_dir
-        abs_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_hanko_dir(hanko_id)
 
         image_rel = rel_dir / "image.png"
-        normalize_image_dpi(image_src, self.base_dir / image_rel)
+        normalize_image_dpi(image_src, self.base_dir / image_rel, mode=PRIVATE_FILE_MODE)
 
         cert_rel_str = ""
         if cert_type == CERT_TYPE_PKCS12:
             if cert_src is None:
                 raise ValueError("cert_type='pkcs12' のとき cert_src は必須です")
             cert_rel = rel_dir / "cert.p12"
-            shutil.copy2(cert_src, self.base_dir / cert_rel)
+            copy_private_file(cert_src, self.base_dir / cert_rel)
             cert_rel_str = str(cert_rel)
         elif cert_type == CERT_TYPE_JPKI:
             if jpki_cert_serial is None:
@@ -273,7 +302,10 @@ class HankoStore:
         if memo is not None:
             target.memo = memo
         if image_src is not None:
-            normalize_image_dpi(image_src, self.base_dir / target.image)
+            self._ensure_hanko_dir(target.id)
+            normalize_image_dpi(
+                image_src, self.base_dir / target.image, mode=PRIVATE_FILE_MODE,
+            )
 
         new_cert_type = cert_type if cert_type is not None else target.cert_type
         if new_cert_type == CERT_TYPE_PKCS12:
@@ -281,12 +313,12 @@ class HankoStore:
                 # 渡された .p12 をハンコ専用ディレクトリにコピーし cert パスを更新する。
                 cert_rel = Path("hankos") / target.id / "cert.p12"
                 abs_cert = self.base_dir / cert_rel
-                abs_cert.parent.mkdir(parents=True, exist_ok=True)
                 if cert_src is None:
                     raise ValueError(
                         "cert_type='pkcs12' への切替時は cert_src が必須です",
                     )
-                shutil.copy2(cert_src, abs_cert)
+                self._ensure_hanko_dir(target.id)
+                copy_private_file(cert_src, abs_cert)
                 target.cert = str(cert_rel)
             target.cert_type = CERT_TYPE_PKCS12
             target.jpki_cert_serial = None

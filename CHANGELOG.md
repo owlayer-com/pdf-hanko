@@ -18,10 +18,41 @@
   保存先を置き換えるよう変更
   ([src/pdfhanko/fileutil.py](src/pdfhanko/fileutil.py))。署名に失敗しても
   不完全な PDF が残らず、既存の保存先ファイルも変更されない。
+- アプリ専用データ（`~/Library/Application Support/PdfHanko/`）とログ
+  （`~/Library/Logs/PdfHanko/`）の権限を、所有者のみアクセスできる設定
+  （ディレクトリ `0700`、ファイル `0600`）に変更
+  ([src/pdfhanko/fileutil.py](src/pdfhanko/fileutil.py),
+  [src/pdfhanko/storage.py](src/pdfhanko/storage.py),
+  [src/pdfhanko/settings.py](src/pdfhanko/settings.py),
+  [src/pdfhanko/logging_config.py](src/pdfhanko/logging_config.py))。
+  PKCS#12 の取り込みは内容だけを複製し、コピー元の権限・拡張属性
+  （quarantine 等）を引き継がない。以前のバージョンで作成されたファイルは、
+  起動時に自動で権限を修正する。
+- ハンコ一覧（`hankos.json`）と設定（`settings.json`）、印影画像の保存を、
+  一時ファイル経由の置き換えに変更し、書き込み途中の失敗でファイルが
+  壊れないようにした。
 
 ### Added
 
 - pytest による自動テストを追加 ([tests/](tests/))。`uv run pytest` で実行する。
+
+### Notes
+
+- 初回起動時に、登録済みのハンコ・設定・ログの権限が自動で修正されます
+  （ディレクトリ `0700`、ファイル `0600`）。操作は不要です。修正した件数は
+  ログ（`~/Library/Logs/PdfHanko/pdfhanko.log`）に記録されます。
+  権限を変更しても本人は読み書きできるため、v0.3.0 に戻してもそのまま使えます。
+- `~/Library/Application Support/PdfHanko/` やログフォルダを別の場所への
+  シンボリックリンクにしている場合は、ログに警告を記録したうえで、リンク先を
+  そのまま使用します。リンク先のフォルダとその中のファイルの権限も、上記と
+  同じく修正されます。なお、`PdfHanko/` の内側（`hankos/` 以下）を
+  シンボリックリンクにすることはできません。
+- 次のものはアプリから修正できません。必要に応じてご自身で対応してください。
+  - Time Machine などのバックアップに残っている、以前のバージョンのデータ
+    （元の権限のまま保存されています）。
+  - ハンコの登録に使った元の `.p12` / `.pfx` ファイル。登録後は安全な場所に
+    保管するか、不要であれば削除してください。
+  - 既存ファイルに設定されている ACL（アクセス制御リスト）と拡張属性。
 
 ## [0.3.0] - 2026-05-28
 

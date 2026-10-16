@@ -14,6 +14,8 @@ from pathlib import Path
 import pypdfium2 as pdfium
 from PIL import Image
 
+from .fileutil import atomic_write
+
 
 @dataclass(frozen=True, slots=True)
 class RenderedPage:
@@ -70,17 +72,23 @@ def render_page(page: "pdfium.PdfPage", scale: float = 1.0) -> RenderedPage:
     )
 
 
-def normalize_image_dpi(src_path: Path, dst_path: Path) -> None:
+def normalize_image_dpi(
+    src_path: Path, dst_path: Path, *, mode: int | None = None,
+) -> None:
     """画像ファイルを 72 DPI の PNG として保存し直す。
 
     印影画像は撮影ソースによって DPI がまちまちなので、ハンコ登録時に
-    本関数で正規化してから保存する。透過情報は保持される。
+    本関数で正規化してから保存する。透過情報は保持される。出力は一時
+    ファイル経由で書き込み、失敗時に不完全な PNG を残さない。
 
     Args:
         src_path: 入力画像ファイル (PNG / JPEG など Pillow が読める形式)。
         dst_path: 出力 PNG の保存先。
+        mode: 出力ファイルの権限。``None`` のときは
+            :func:`pdfhanko.fileutil.atomic_write` の既定に従う。
     """
     img = Image.open(src_path)
     if img.mode not in ("RGBA", "RGB", "LA", "L"):
         img = img.convert("RGBA")
-    img.save(dst_path, format="PNG", dpi=(72, 72))
+    with atomic_write(dst_path, mode=mode) as f:
+        img.save(f, format="PNG", dpi=(72, 72))
