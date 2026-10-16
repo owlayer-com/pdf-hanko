@@ -59,6 +59,17 @@
   ([src/pdfhanko/jpki.py](src/pdfhanko/jpki.py))。PIN がシェルの履歴や
   プロセスの引数に残らないよう、`--verify-pin` 指定時に対話入力させる。
 
+- 配布用 `.app` に同梱するパッケージのバージョンを `uv.lock` に固定
+  ([pyproject.toml](pyproject.toml), [constraints-macos.txt](constraints-macos.txt))。
+  これまでは Briefcase の依存指定が `>=` で推移的な依存も固定していなかった
+  ため、ビルド時点の最新版が入っていた（v0.3.0 の成果物では `idna`・`click`・
+  `platformdirs`・`uritools` が lock と異なっていた）。`uv.lock` から生成した
+  制約ファイルを Briefcase の `requirement_installer_args` で pip に渡す。
+- リリース前に同梱パッケージを `uv.lock` と照合し、パッケージ一覧と全ファイルの
+  SHA-256 をマニフェストとして記録するスクリプトを追加
+  ([scripts/verify_bundle_deps.py](scripts/verify_bundle_deps.py))。README の
+  リリース手順に組み込んだ。
+
 ### Added
 
 - 「PDF Hanko」メニューに「設定…」（⌘,）を追加
