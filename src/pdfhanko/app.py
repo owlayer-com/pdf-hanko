@@ -16,6 +16,7 @@ from .logging_config import LOG_DIR, setup_logging
 from .settings import AppSettings
 from .storage import HankoStore
 from .windows.main_window import MainWindow
+from .windows.settings_window import edit_resource_limits
 
 SHOW_FIELD_MENU_LABEL = "pyHanko --field 表示"
 """「表示」メニューに置く --field トグル項目のベースラベル。"""
@@ -164,6 +165,17 @@ class PdfHankoApp(toga.App):
         )
         self.commands.add(self._sign_command)
 
+        # macOS 標準の「PDF Hanko」メニュー →「設定…」(⌘,) に設定画面を置く。
+        self._settings_open = False
+        self.commands.add(
+            toga.Command.standard(
+                self,
+                toga.Command.PREFERENCES,
+                action=self._on_open_settings,
+                text="設定…",
+            )
+        )
+
         # 「表示」メニュー配下に pyHanko CLI 引数表示のトグルを持つ。
         self._show_field_command = toga.Command(
             self._on_toggle_show_field,
@@ -182,6 +194,24 @@ class PdfHankoApp(toga.App):
         asyncio.create_task(
             self.dialog(toga.InfoDialog("PDF Hanko について", _build_about_message()))
         )
+
+    async def _on_open_settings(self, widget, **kwargs) -> None:
+        """「設定…」メニュー押下時のハンドラ。
+
+        保存された上限は次の操作 (PDF を開く・ページ移動・印影登録・署名)
+        から適用する。表示中の PDF は開き直さない。
+        """
+        if self._settings_open:
+            return
+        self._settings_open = True
+        try:
+            limits = await edit_resource_limits(self.main_window, self.settings.limits)
+        finally:
+            self._settings_open = False
+        if limits is None:
+            return
+        self.settings.limits = limits
+        self.settings.save()
 
     async def _notify_load_problems(self) -> None:
         """ハンコ一覧の読み込みで見つかった問題を起動直後に通知する。"""

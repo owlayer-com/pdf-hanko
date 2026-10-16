@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Callable
 import toga
 from toga.style.pack import COLUMN, ROW, Pack
 
+from ..limits import ResourceLimitError
+from ..rendering import check_image_file
 from ..signing import (
     BadPasswordError,
     JpkiCertMismatchError,
@@ -368,8 +370,18 @@ class RegisterWindow:
         )
         if path is None:
             return
+        # プレビュー (NSImage) で展開する前に、サイズとピクセル数を確認する。
+        try:
+            check_image_file(Path(path), self.app.settings.limits)
+        except ResourceLimitError as e:
+            self.status.text = str(e)
+            return
+        except Exception as e:
+            self.status.text = f"画像の読み込みに失敗: {e}"
+            return
         self.image_path = Path(path)
         self.image_label.text = self.image_path.name
+        self.status.text = ""
         try:
             self.preview.image = toga.Image(self.image_path)
         except Exception as e:
@@ -468,6 +480,7 @@ class RegisterWindow:
                         image_src=self.image_path,
                         cert_src=self.cert_path,
                         cert_type=CERT_TYPE_PKCS12,
+                        limits=self.app.settings.limits,
                     )
                 else:
                     self.app.store.add(
@@ -478,6 +491,7 @@ class RegisterWindow:
                         cert_type=CERT_TYPE_JPKI,
                         jpki_cert_serial=self.jpki_cert_serial,
                         jpki_cert_subject_cn=self.jpki_cert_subject_cn,
+                        limits=self.app.settings.limits,
                     )
             else:
                 update_kwargs: dict = dict(
@@ -485,6 +499,7 @@ class RegisterWindow:
                     size_mm=size_mm,
                     memo=memo,
                     image_src=self.image_path,
+                    limits=self.app.settings.limits,
                 )
                 if cert_type != self.editing.cert_type:
                     # 証明書種別が変わったときだけ store に種別変更を伝える。

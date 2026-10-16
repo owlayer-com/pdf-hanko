@@ -47,6 +47,7 @@ from .fileutil import (
     ensure_private_dir,
     fix_private_permissions,
 )
+from .limits import ResourceLimits
 from .rendering import normalize_image_dpi
 
 logger = logging.getLogger(__name__)
@@ -427,6 +428,7 @@ class HankoStore:
         cert_type: str = CERT_TYPE_PKCS12,
         jpki_cert_serial: str | None = None,
         jpki_cert_subject_cn: str | None = None,
+        limits: ResourceLimits | None = None,
     ) -> Hanko:
         """新規ハンコを登録する。
 
@@ -446,14 +448,25 @@ class HankoStore:
             jpki_cert_serial: ``cert_type == "jpki"`` 時の証明書シリアル番号
                 (16 進大文字)。
             jpki_cert_subject_cn: ``cert_type == "jpki"`` 時の証明書 Subject CN。
+            limits: 印影画像の処理量の上限。``None`` のときは既定値。
 
         Returns:
             登録された :class:`Hanko` インスタンス。
+
+        Raises:
+            pdfhanko.limits.ResourceLimitError: 印影画像が上限を超える場合。
         """
         hanko_id = uuid.uuid4().hex
         abs_dir = self._ensure_hanko_dir(hanko_id)
 
-        normalize_image_dpi(image_src, abs_dir / IMAGE_FILE_NAME, mode=PRIVATE_FILE_MODE)
+        try:
+            normalize_image_dpi(
+                image_src, abs_dir / IMAGE_FILE_NAME, mode=PRIVATE_FILE_MODE, limits=limits,
+            )
+        except BaseException:
+            # 作成したばかりの空ディレクトリを残さない。
+            shutil.rmtree(abs_dir, ignore_errors=True)
+            raise
 
         cert_rel_str = ""
         if cert_type == CERT_TYPE_PKCS12:
@@ -520,6 +533,7 @@ class HankoStore:
         cert_type: str | None = None,
         jpki_cert_serial: str | None = None,
         jpki_cert_subject_cn: str | None = None,
+        limits: ResourceLimits | None = None,
     ) -> Hanko:
         """既存ハンコを部分的に更新する。
 
@@ -538,6 +552,7 @@ class HankoStore:
             cert_type: 新しい証明書ソース種別。
             jpki_cert_serial: 新 cert_type が ``"jpki"`` のときのシリアル。
             jpki_cert_subject_cn: 新 cert_type が ``"jpki"`` のとき Subject CN。
+            limits: 印影画像の処理量の上限。``None`` のときは既定値。
 
         Returns:
             更新後の :class:`Hanko` インスタンス。
@@ -549,17 +564,18 @@ class HankoStore:
         if target is None:
             raise KeyError(hanko_id)
 
+        # 画像は上限超過で失敗し得るため、他の項目を書き換える前に処理する。
+        if image_src is not None:
+            abs_dir = self._ensure_hanko_dir(target.id)
+            normalize_image_dpi(
+                image_src, abs_dir / IMAGE_FILE_NAME, mode=PRIVATE_FILE_MODE, limits=limits,
+            )
         if name is not None:
             target.name = name
         if size_mm is not None:
             target.size_mm = size_mm
         if memo is not None:
             target.memo = memo
-        if image_src is not None:
-            abs_dir = self._ensure_hanko_dir(target.id)
-            normalize_image_dpi(
-                image_src, abs_dir / IMAGE_FILE_NAME, mode=PRIVATE_FILE_MODE,
-            )
 
         new_cert_type = cert_type if cert_type is not None else target.cert_type
         if new_cert_type == CERT_TYPE_PKCS12:

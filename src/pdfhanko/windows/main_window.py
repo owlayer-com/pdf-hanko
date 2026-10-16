@@ -22,6 +22,7 @@ from PIL import Image
 from toga.style.pack import COLUMN, ROW, Pack
 
 from ..fileutil import is_same_file
+from ..rendering import check_pdf_file
 from ..signing import (
     BadPasswordError,
     JpkiCertMismatchError,
@@ -177,7 +178,10 @@ class MainWindow:
         # 到達する。未保存があれば確認ダイアログを挟んだうえでアプリを終了させる。
         self.window.on_close = self._on_main_window_close
         self.selected_hanko: Hanko | None = None
-        self.pdf_view = PdfView(on_status_change=self._on_pdf_status_change)
+        self.pdf_view = PdfView(
+            on_status_change=self._on_pdf_status_change,
+            get_limits=lambda: self.app.settings.limits,
+        )
         self.pdf_view.on_close_pdf_callback = self._after_pdf_close
         self.pdf_view.set_show_field(self.app.settings.show_field)
 
@@ -682,6 +686,13 @@ class MainWindow:
             await self.window.dialog(
                 toga.ErrorDialog(SAME_FILE_TITLE, SAME_FILE_MESSAGE)
             )
+            return
+        # pyHanko は署名時にファイル全体を扱うため、開いた後に差し替えられて
+        # いないかも含めてサイズを再確認する。
+        try:
+            check_pdf_file(self.pdf_view.doc_path, self.app.settings.limits)
+        except Exception as e:
+            await self.window.dialog(toga.ErrorDialog("署名できません", str(e)))
             return
 
         signer, close_signer = await self._load_signer_for_selected_hanko()

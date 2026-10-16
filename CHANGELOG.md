@@ -41,9 +41,30 @@
   一時ファイル経由の置き換えに変更し、書き込み途中の失敗でファイルが
   壊れないようにした。
 
+- 巨大なページや高圧縮の PDF・画像によるメモリ枯渇・応答停止を防ぐため、
+  処理量に上限を設けた ([src/pdfhanko/limits.py](src/pdfhanko/limits.py),
+  [src/pdfhanko/rendering.py](src/pdfhanko/rendering.py))。PDF のファイル
+  サイズ・ページ数・1 ページの描画サイズ、印影画像のファイルサイズ・ピクセル数を、
+  メモリを確保する前に確認する。上限を超える PDF は開かずにエラーを表示し、
+  上限を超えるページは「表示できません」と表示する。
+
 ### Added
 
+- 「PDF Hanko」メニューに「設定…」（⌘,）を追加
+  ([src/pdfhanko/windows/settings_window.py](src/pdfhanko/windows/settings_window.py))。
+  処理量の上限を変更できる。各項目に既定値と推奨上限を表示し、推奨上限を
+  超える値は警告と確認のうえで保存できる。設定は `settings.json` の `limits`
+  に保存される。
 - pytest による自動テストを追加 ([tests/](tests/))。`uv run pytest` で実行する。
+
+### Fixed
+
+- 「pyHanko --field 表示」の切り替え時に、`settings.json` のほかの項目が
+  失われないよう、すべての項目を書き出すよう変更
+  ([src/pdfhanko/settings.py](src/pdfhanko/settings.py))。
+- PDF を開くのに失敗したとき、それまで表示していた PDF の状態が壊れる問題を修正
+  ([src/pdfhanko/windows/pdf_view.py](src/pdfhanko/windows/pdf_view.py))。
+  新しい PDF の確認が済むまで、表示中の PDF を閉じないようにした。
 
 ### Notes
 
