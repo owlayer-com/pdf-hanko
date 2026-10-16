@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+(次の変更点はここに追記します。)
+
+## [0.3.1] - 2026-10-17
+
+2026-10-16 のセキュリティレビューで挙がった指摘を修正したリリース。保存時の
+原本の破損防止、秘密鍵などの権限の制限、設定ファイルの検証、PDF・画像の処理量の
+上限、マイナンバーカードの PIN 検証の強化、配布物の依存の固定を行った。
+
 ### Security
 
 - 保存先に入力 PDF と同じファイルを指定した場合に、署名処理の途中で入力が
@@ -260,7 +268,8 @@ v0.1.0 リリース後に確認されたバグの修正と、UI の小幅な改�
 - 電子署名の法的有効性は使用する証明書・運用方法に依存します。重要な
   契約・法的書類で利用する場合は事前検証を強く推奨します。
 
-[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/owlayer-com/pdf-hanko/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/owlayer-com/pdf-hanko/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/owlayer-com/pdf-hanko/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/owlayer-com/pdf-hanko/compare/v0.1.1...v0.1.2
